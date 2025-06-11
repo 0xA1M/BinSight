@@ -1,0 +1,22 @@
+{
+  "cSpell.words": [
+    "ABIVERSION",
+    "binsight",
+    "DOSEXEC",
+    "Ehdr",
+    "ehsize",
+    "ELFCLASS",
+    "ELFDATA",
+    "ELFMAG",
+    "OSABI",
+    "phentsize",
+    "phnum",
+    "phoff",
+    "relro",
+    "shentsize",
+    "shnum",
+    "shoff",
+    "shstrndx",
+    "shstrtab"
+  ]
+}

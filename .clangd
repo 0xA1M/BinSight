@@ -1,0 +1,18 @@
+CompileFlags:
+  Add: [
+    "-I./src",
+    "-I./include",
+    "-Wall",
+    "-Wextra",
+    "-Wpedantic"
+  ]
+
+Diagnostics:
+  ClangTidy:
+    Add: [
+      "clang-analyzer-*",
+      "bugprone-*",
+    ]
+  UnusedIncludes: Strict
+  Suppress:
+    - "unused-includes:include/common.h"
