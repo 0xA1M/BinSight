@@ -1,3 +1,4 @@
+#include <elf.h>
 #include <stdio.h>
 
 #include "core/binary.h"

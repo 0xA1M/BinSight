@@ -8,12 +8,10 @@
 
 typedef struct {
   // Raw parsed headers
-  void *ehdr;  // Elf32_Ehdr* or Elf64_Ehdr*
-  void *phdrs; // Program headers array
-  int phnum;
+  void *ehdr; // Elf32_Ehdr* or Elf64_Ehdr*
 
+  void *phdrs; // Program headers array
   void *shdrs; // Section headers array
-  int shnum;
 
   char *shstrtab; // Section header string table
   char *strtab;   // .strtab (for symbols)
@@ -30,10 +28,17 @@ typedef struct {
 ELFInfo *init_elf(void);
 void free_elf(ELFInfo *);
 
-uint16_t read_elf_half(const unsigned char *, size_t, bool);
-uint32_t read_elf_word(const unsigned char *, size_t, bool);
-uint64_t read_elf_xword(const unsigned char *, size_t, bool);
+uint8_t read_byte(const unsigned char *buf, size_t offset);
+uint16_t read_word(const unsigned char *buf, size_t offset,
+                   bool is_little_endian);
+uint32_t read_dword(const unsigned char *buf, size_t offset,
+                    bool is_little_endian);
+uint64_t read_qword(const unsigned char *buf, size_t offset,
+                    bool is_little_endian);
 
-void print_elf_header(void *);
+void print_elf_ehdr(void *ehdr);
+void print_elf_phdrs(const void *phdrs, int bitness, const uint16_t phnum);
+void print_elf_shdrs(const void *shdrs, int bitness, const uint16_t shnum,
+                     const char *shstrtab);
 
 #endif // ELF_UTILS_H

@@ -8,6 +8,7 @@
     "ELFCLASS",
     "ELFDATA",
     "ELFMAG",
+    "memsz",
     "OSABI",
     "phentsize",
     "phnum",
@@ -16,6 +17,7 @@
     "shentsize",
     "shnum",
     "shoff",
+    "shstr",
     "shstrndx",
     "shstrtab"
   ]

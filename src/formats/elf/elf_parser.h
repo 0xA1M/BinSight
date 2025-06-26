@@ -3,7 +3,7 @@
 
 #include "elf_utils.h"
 
-int parse_elf32(const unsigned char *, ELFInfo *);
-int parse_elf64(const unsigned char *, ELFInfo *);
+int parse_elf32(const unsigned char *buf, ELFInfo *elf);
+int parse_elf64(const unsigned char *buf, ELFInfo *elf);
 
 #endif // ELF_PARSER_H

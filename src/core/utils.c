@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "format.h"
@@ -64,4 +65,15 @@ bool is_file_exist(const char *path) {
 #else
   return S_ISREG(path_stat.st_mode);
 #endif
+}
+
+void print_hex(const unsigned char *buf, size_t len) {
+  for (size_t i = 1; i <= len; i++) {
+    printf("%02X ", buf[i - 1]);
+
+    if (i % 32 == 0)
+      printf("\n");
+  }
+
+  printf("\n");
 }

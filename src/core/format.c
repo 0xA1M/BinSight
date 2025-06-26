@@ -72,7 +72,7 @@ BinaryFile *load_binary(const char *path) {
   if (fmt == FORMAT_UNKNOWN)
     return NULL;
 
-  FILE *f = fopen(path, "rw");
+  FILE *f = fopen(path, "rb");
   if (f == NULL) {
     fprintf(stderr, "Failed to open file: %s\n", strerror(errno));
     return NULL;
@@ -94,6 +94,7 @@ BinaryFile *load_binary(const char *path) {
   case FORMAT_ELF:
     if (load_elf(f, binary) == -1) {
       fclose(f);
+      free(binary->path);
       free(binary);
       return NULL;
     }

@@ -43,7 +43,7 @@ int load_elf(FILE *f, BinaryFile *bin) {
     }
     break;
   case BITNESS_64:
-    if (parse_elf64(bin->data, elf)) {
+    if (parse_elf64(bin->data, elf) == -1) {
       free(elf);
       free(bin->data);
       return -1;
