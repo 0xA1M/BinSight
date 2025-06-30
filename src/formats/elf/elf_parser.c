@@ -1,8 +1,4 @@
-#include <elf.h>
 #include <errno.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -304,7 +300,7 @@ static char *parse_elf64_shstrtab(const unsigned char *buffer,
                                   const Elf64_Shdr *shdrs,
                                   const uint16_t shstrndx) {
   if (!buffer || !shdrs || shstrndx == SHN_UNDEF) {
-    fprintf(stderr, "Invalid arguments to parse_shstrtab_elf64\n");
+    fprintf(stderr, "Invalid arguments to parse_elf64_shstrtab\n");
     return NULL;
   }
 
