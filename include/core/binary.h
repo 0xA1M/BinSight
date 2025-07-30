@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef struct FormatHandler FormatHandler;
+
 typedef enum BinaryBitness {
   BITNESS_UNKNOWN,
   BITNESS_32,
@@ -24,7 +26,7 @@ typedef enum BinaryFormat {
   FORMAT_UNKNOWN
 } BinaryFormat;
 
-typedef struct {
+typedef struct BinaryFile {
   char *path;
   BinaryFormat format;
   BinaryBitness bitness;
@@ -46,9 +48,13 @@ typedef struct {
 
   // Format-specific parsed data.
   void *parsed;
+
+  // Handler
+  const FormatHandler *handler;
 } BinaryFile;
 
-BinaryFile *init_binary(const char *path, const BinaryFormat fmt, long f_size);
+BinaryFile *init_binary(const char *path, const BinaryFormat fmt,
+                        uint64_t f_size);
 void free_binary(BinaryFile *bin);
 
 #endif // BINARY_H

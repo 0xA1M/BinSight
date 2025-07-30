@@ -1,9 +1,8 @@
-#include <errno.h>
-#include <stdio.h>
 #include <string.h>
 
-#include "format.h"
-#include "utils.h"
+#include "core/binary.h"
+#include "core/format.h"
+#include "core/utils.h"
 
 inline BinaryFormat get_binary_format(const char *mime_str) {
   if (!mime_str)
@@ -25,31 +24,17 @@ inline BinaryFormat get_binary_format(const char *mime_str) {
 }
 
 inline const char *print_binary_format(BinaryFormat fmt) {
-  return fmt == FORMAT_UNKNOWN ? "unknown"
-         : fmt == FORMAT_ELF   ? "ELF"
-         : fmt == FORMAT_MACHO ? "MACHO"
-         : fmt == FORMAT_PE    ? "PE"
-                               : "unknown";
-}
-
-long get_file_size(FILE *f) {
-  if (fseek(f, 0, SEEK_END) == -1) {
-    fprintf(stderr, "Failed to seek to file end: %s\n", strerror(errno));
-    return -1;
+  switch (fmt) {
+  case FORMAT_ELF:
+    return "ELF";
+  case FORMAT_PE:
+    return "PE";
+  case FORMAT_MACHO:
+    return "MACHO";
+  case FORMAT_UNKNOWN:
+  default:
+    return "unknown";
   }
-
-  long f_size = ftell(f);
-  if (f_size == -1) {
-    fprintf(stderr, "Failed to get file size: %s\n", strerror(errno));
-    return -1;
-  }
-
-  if (fseek(f, 0, SEEK_SET) == -1) {
-    fprintf(stderr, "Failed to rewind file pointer: %s\n", strerror(errno));
-    return -1;
-  }
-
-  return f_size;
 }
 
 bool is_file_exist(const char *path) {

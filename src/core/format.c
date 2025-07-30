@@ -1,11 +1,22 @@
 #include <errno.h>
+#include <fcntl.h>
 #include <magic.h>
-#include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 
-#include "binary.h"
+#include "core/format.h"
+#include "core/utils.h"
 #include "formats/elf/elf_loader.h"
-#include "utils.h"
+#include "formats/elf/elf_print.h"
+#include "formats/elf/elf_utils.h"
+
+static const FormatHandler handlers[] = {
+    {.name = "ELF",
+     .format = FORMAT_ELF,
+     .load = load_elf,
+     .free = free_elf,
+     .print = print_elf},
+};
 
 static BinaryFormat detect_format(const char *path) {
   magic_t cookie = magic_open(MAGIC_MIME_TYPE | MAGIC_ERROR);
@@ -72,38 +83,55 @@ BinaryFile *load_binary(const char *path) {
   if (fmt == FORMAT_UNKNOWN)
     return NULL;
 
-  FILE *f = fopen(path, "rb");
-  if (f == NULL) {
-    fprintf(stderr, "Failed to open file: %s\n", strerror(errno));
+  const FormatHandler *handler = NULL;
+  for (size_t i = 0; i < ARR_COUNT(handlers); i++) {
+    if (handlers[i].format == fmt) {
+      handler = &handlers[i];
+      break;
+    }
+  }
+
+  if (handler == NULL) {
+    fprintf(stderr, "No handler found for format %s\n",
+            print_binary_format(fmt));
     return NULL;
   }
 
-  long f_size = get_file_size(f);
-  if (f_size == -1) {
-    fclose(f);
+  int fd = open(path, O_RDONLY);
+  if (fd == -1) {
+    fprintf(stderr, "Failed to file: %s\n", strerror(errno));
+    return NULL;
+  }
+
+  struct stat sb = {0};
+  if (fstat(fd, &sb) == -1) {
+    fprintf(stderr, "Failed to get file size: %s\n", strerror(errno));
+    close(fd);
+    return NULL;
+  }
+
+  uint64_t f_size = sb.st_size;
+  uint8_t *mapped_mem = mmap(NULL, f_size, PROT_READ, MAP_PRIVATE, fd, 0);
+  close(fd);
+
+  if (mapped_mem == MAP_FAILED) {
+    fprintf(stderr, "Failed to map file to memory: %s\n", strerror(errno));
     return NULL;
   }
 
   BinaryFile *binary = init_binary(path, fmt, f_size);
   if (binary == NULL) {
-    fclose(f);
+    munmap(mapped_mem, f_size);
     return NULL;
   }
 
-  switch (fmt) {
-  case FORMAT_ELF:
-    if (load_elf(f, binary) == -1) {
-      fclose(f);
-      free(binary->path);
-      free(binary);
-      return NULL;
-    }
-    break;
-  default:
-    not_implemented();
-    break;
+  binary->handler = handler;
+  binary->data = mapped_mem;
+
+  if (handler->load(binary) == -1) {
+    free_binary(binary);
+    return NULL;
   }
 
-  fclose(f);
   return binary;
 }

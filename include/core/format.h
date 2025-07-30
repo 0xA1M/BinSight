@@ -10,6 +10,20 @@
 #define X_DOSEXEC "application/x-dosexec"
 #define X_PORTEXEC "application/vnd.microsoft.portable-executable"
 
+typedef struct FormatHandler {
+  const char *name;
+  BinaryFormat format;
+
+  // Loader function
+  int (*load)(BinaryFile *bin);
+
+  // Free function
+  void (*free)(void *parsed_data);
+
+  // Print function
+  void (*print)(void *parsed_data);
+} FormatHandler;
+
 BinaryFile *load_binary(const char *path);
 
 #endif // FORMAT_H

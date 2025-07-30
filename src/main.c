@@ -1,9 +1,10 @@
-#include <elf.h>
 #include <stdio.h>
 
 #include "core/binary.h"
 #include "core/format.h"
+#include "formats/elf/elf_utils.h"
 
+// TODO: Better command line argument using getopt
 int main(int argc, const char **argv) {
   if (argc < 2) {
     fprintf(stderr, "Usage: %s <binary>\n", argv[0]);
@@ -14,7 +15,9 @@ int main(int argc, const char **argv) {
   if (binary == NULL)
     return -1;
 
-  free_binary(binary);
+  if (binary->handler && binary->handler->print)
+    binary->handler->print((ELFInfo *)binary->parsed);
 
+  free_binary(binary);
   return 0;
 }

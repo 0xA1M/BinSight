@@ -1,10 +1,8 @@
 #ifndef ELF_LOADER_H
 #define ELF_LOADER_H
 
-#include <stdio.h>
-
 #include "core/binary.h"
 
-int load_elf(FILE *f, BinaryFile *bin);
+int load_elf(BinaryFile *bin);
 
 #endif // ELF_LOADER_H

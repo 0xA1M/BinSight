@@ -6,11 +6,11 @@ build:
 	cmake -S . -B build
 	cmake --build build
 
-run:
+run: build
 	@./build/binsight ./build/binsight
 
-run32:
-	@./build/binsight ~/Playground/C/main
+run32: build
+	@./build/binsight ~/Playground/32/main
 
 clean:
 	rm -rf build
