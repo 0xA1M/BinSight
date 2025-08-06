@@ -5,7 +5,7 @@
 #include "formats/elf/elf_utils.h"
 
 /* Print ELF Header */
-const char *get_osabi_name(uint8_t osabi) {
+static const char *get_osabi_name(uint8_t osabi) {
   for (size_t i = 0; i < ARR_COUNT(osabi_names); i++) {
     if (osabi_names[i].id == osabi)
       return osabi_names[i].name;
@@ -95,16 +95,16 @@ void print_elf_ehdr(void *header) {
   printf("  Flags:                             0x%x\n", ehdr->e_flags);
   printf("  Size of this header:               %u (bytes)\n", ehdr->e_ehsize);
   printf("  Size of program headers:           %u (bytes)\n",
-         ehdr->e_phentsize); // Fixed: removed multiplication
+         ehdr->e_phentsize);
   printf("  Number of program headers:         %u\n", ehdr->e_phnum);
   printf("  Size of section headers:           %u (bytes)\n",
-         ehdr->e_shentsize); // Fixed: removed multiplication
+         ehdr->e_shentsize);
   printf("  Number of section headers:         %u\n", ehdr->e_shnum);
   printf("  Section header string table index: %u\n", ehdr->e_shstrndx);
 }
 
 /* Print ELF Program Header Table */
-const char *phdr_type_to_str(uint32_t type) {
+static const char *phdr_type_to_str(uint32_t type) {
   for (size_t i = 0; i < ARR_COUNT(phdr_type_names); i++) {
     if (phdr_type_names[i].id == type)
       return phdr_type_names[i].name;
@@ -140,7 +140,7 @@ void print_elf_phdrs(const void *phdrs, const uint16_t phnum) {
 }
 
 /* Print ELF Section Header Table */
-const char *shdr_type_to_str(uint32_t type) {
+static const char *shdr_type_to_str(uint32_t type) {
   for (size_t i = 0; i < ARR_COUNT(shdr_type_names); i++) {
     if (shdr_type_names[i].id == type)
       return shdr_type_names[i].name;

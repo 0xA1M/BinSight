@@ -26,7 +26,6 @@ ELFInfo *init_elf(void) {
 
 void free_elf(void *elf_ptr) {
   ELFInfo *elf = (ELFInfo *)elf_ptr;
-
   if (!elf)
     return;
 

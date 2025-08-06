@@ -60,8 +60,8 @@ static Elf64_Phdr *parse_elf_phdr(const uint8_t *buffer,
 
   READ_FIELD_DWORD(p_header, p_type, buffer, offset, is_little_endian);
 
-  // We can use READ_FIELD_32_64 because the order of the headers differ between
-  // 32bits and 64bits ELFs
+  // We cannot use READ_FIELD_32_64 because the order of the headers differ
+  // between 32bits and 64bits ELFs
   if (bitness == BITNESS_32) {
     READ_FIELD_DWORD(p_header, p_offset, buffer, offset, is_little_endian);
     READ_FIELD_DWORD(p_header, p_vaddr, buffer, offset, is_little_endian);

@@ -92,14 +92,14 @@ BinaryFile *load_binary(const char *path) {
   }
 
   if (handler == NULL) {
-    fprintf(stderr, "No handler found for format %s\n",
+    fprintf(stderr, "No handler found for format. %s format not supported!\n",
             print_binary_format(fmt));
     return NULL;
   }
 
   int fd = open(path, O_RDONLY);
   if (fd == -1) {
-    fprintf(stderr, "Failed to file: %s\n", strerror(errno));
+    fprintf(stderr, "Failed to open file: %s\n", strerror(errno));
     return NULL;
   }
 
@@ -115,7 +115,7 @@ BinaryFile *load_binary(const char *path) {
   close(fd);
 
   if (mapped_mem == MAP_FAILED) {
-    fprintf(stderr, "Failed to map file to memory: %s\n", strerror(errno));
+    fprintf(stderr, "Failed to map file into memory: %s\n", strerror(errno));
     return NULL;
   }
 

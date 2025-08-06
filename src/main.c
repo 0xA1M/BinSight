@@ -2,7 +2,6 @@
 
 #include "core/binary.h"
 #include "core/format.h"
-#include "formats/elf/elf_utils.h"
 
 // TODO: Better command line argument using getopt
 int main(int argc, const char **argv) {
@@ -16,7 +15,7 @@ int main(int argc, const char **argv) {
     return -1;
 
   if (binary->handler && binary->handler->print)
-    binary->handler->print((ELFInfo *)binary->parsed);
+    binary->handler->print(binary->parsed);
 
   free_binary(binary);
   return 0;
