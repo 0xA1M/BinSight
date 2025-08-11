@@ -4,29 +4,26 @@
 #include "formats/elf/elf_print.h"
 #include "formats/elf/elf_utils.h"
 
+static const char *get_name_from_id(uint32_t id, const TypeEntry *table,
+                                    uint64_t table_count) {
+  for (size_t i = 0; i < table_count; i++)
+    if (table[i].id == id)
+      return table[id].name;
+
+  return "Unknown";
+}
+
 /* Print ELF Header */
-static const char *get_osabi_name(uint8_t osabi) {
-  for (size_t i = 0; i < ARR_COUNT(osabi_names); i++) {
-    if (osabi_names[i].id == osabi)
-      return osabi_names[i].name;
-  }
-  return "Unknown";
+static const char *get_osabi_name(uint32_t osabi) {
+  return get_name_from_id(osabi, osabi_names, ARR_COUNT(osabi_names));
 }
 
-static const char *get_type_name(uint16_t type) {
-  for (size_t i = 0; i < ARR_COUNT(type_names); i++) {
-    if (type_names[i].id == type)
-      return type_names[i].name;
-  }
-  return "Unknown";
+static const char *get_type_name(uint32_t type) {
+  return get_name_from_id(type, type_names, ARR_COUNT(type_names));
 }
 
-static const char *get_machine_name(uint16_t machine) {
-  for (size_t i = 0; i < ARR_COUNT(machine_names); i++) {
-    if (machine_names[i].id == machine)
-      return machine_names[i].name;
-  }
-  return "Unknown";
+static const char *get_machine_name(uint32_t machine) {
+  return get_name_from_id(machine, machine_names, ARR_COUNT(machine_names));
 }
 
 static void print_e_ident(unsigned char *e_ident) {
@@ -105,15 +102,11 @@ void print_elf_ehdr(void *header) {
 
 /* Print ELF Program Header Table */
 static const char *phdr_type_to_str(uint32_t type) {
-  for (size_t i = 0; i < ARR_COUNT(phdr_type_names); i++) {
-    if (phdr_type_names[i].id == type)
-      return phdr_type_names[i].name;
-  }
   if (type >= PT_LOOS && type <= PT_HIOS)
     return "OS-SPECIFIC";
   if (type >= PT_LOPROC && type <= PT_HIPROC)
     return "PROC-SPECIFIC";
-  return "UNKNOWN";
+  return get_name_from_id(type, phdr_type_names, ARR_COUNT(phdr_type_names));
 }
 
 void print_elf_phdrs(const void *phdrs, const uint16_t phnum) {
@@ -141,19 +134,15 @@ void print_elf_phdrs(const void *phdrs, const uint16_t phnum) {
 
 /* Print ELF Section Header Table */
 static const char *shdr_type_to_str(uint32_t type) {
-  for (size_t i = 0; i < ARR_COUNT(shdr_type_names); i++) {
-    if (shdr_type_names[i].id == type)
-      return shdr_type_names[i].name;
-  }
   if (type >= SHT_LOOS && type <= SHT_HIOS)
     return "OS-SPECIFIC";
   if (type >= SHT_LOPROC && type <= SHT_HIPROC)
     return "PROC-SPECIFIC";
-  return "UNKNOWN";
+  return get_name_from_id(type, shdr_type_names, ARR_COUNT(shdr_type_names));
 }
 
 void print_elf_shdrs(const void *shdrs, const uint16_t shnum,
-                     const char *shstrtab) {
+                     const char *shstrtab, const uint64_t shstrtab_size) {
   if (!shdrs) {
     fprintf(stderr, "Cannot print section headers: missing data.\n");
     return;
@@ -167,7 +156,9 @@ void print_elf_shdrs(const void *shdrs, const uint16_t shnum,
   const Elf64_Shdr *sh_arr = (Elf64_Shdr *)shdrs;
   for (uint16_t i = 0; i < shnum; ++i) {
     const Elf64_Shdr *sh = &sh_arr[i];
-    const char *name = shstrtab ? &shstrtab[sh->sh_name] : "???";
+    const char *name = "???";
+    if (shstrtab && sh->sh_name < shstrtab_size)
+      name = &shstrtab[sh->sh_name];
 
     printf("  [%2u] %-18s %-15s 0x%016lx 0x%08lx 0x%08lx 0x%08lx %-6lu 0x%08lx "
            "%-6u %-6u\n",
@@ -188,5 +179,5 @@ void print_elf(void *elf_ptr) {
 
   print_elf_ehdr(elf->ehdr);
   print_elf_phdrs(elf->phdrs, elf->phnum);
-  print_elf_shdrs(elf->shdrs, elf->shnum, elf->shstrtab);
+  print_elf_shdrs(elf->shdrs, elf->shnum, elf->shstrtab, elf->shstrtab_size);
 }

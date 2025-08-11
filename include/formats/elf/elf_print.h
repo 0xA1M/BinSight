@@ -265,7 +265,7 @@ static const TypeEntry shdr_type_names[] = {
 };
 
 void print_elf_shdrs(const void *shdrs, const uint16_t shnum,
-                     const char *shstrtab);
+                     const char *shstrtab, const uint64_t shstrtab_size);
 
 /* Print whole ELF */
 void print_elf(void *elf_ptr);

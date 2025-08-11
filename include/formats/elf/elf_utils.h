@@ -23,6 +23,8 @@ typedef struct {
 
   char *shstrtab;
   uint16_t shstrndx;
+  uint64_t shstrtab_off;
+  uint64_t shstrtab_size;
 
   Elf64_Sym *symtab;
   uint64_t sym_count;

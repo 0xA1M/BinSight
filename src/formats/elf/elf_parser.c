@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "core/binary.h"
 #include "core/mem.h"
 #include "formats/elf/elf_parser.h"
 #include "formats/elf/elf_utils.h"
@@ -113,6 +114,12 @@ int parse_elf(BinaryFile *bin, ELFInfo *elf) {
     return -1;
   }
 
+  if ((bin->bitness == BITNESS_32 && bin->size < sizeof(Elf32_Ehdr)) ||
+      (bin->bitness == BITNESS_64 && bin->size < sizeof(Elf64_Ehdr))) {
+    fprintf(stderr, "Buffer too small to contain ELF header\n");
+    return -1;
+  }
+
   Arena *arena = bin->arena;
 
   elf->ehdr = (Elf64_Ehdr *)arena_alloc(arena, sizeof(Elf64_Ehdr));
@@ -196,19 +203,20 @@ int parse_elf(BinaryFile *bin, ELFInfo *elf) {
 
   if (elf->shdrs && elf->shstrndx != SHN_UNDEF && elf->shstrndx < elf->shnum) {
     const Elf64_Shdr *shstrtab_hdr = &elf->shdrs[elf->shstrndx];
+    elf->shstrtab_off = shstrtab_hdr->sh_offset;
+    elf->shstrtab_size = shstrtab_hdr->sh_size;
 
     // Validate string table bounds
-    if (shstrtab_hdr->sh_offset + shstrtab_hdr->sh_size > bin->size) {
+    if (elf->shstrtab_off + elf->shstrtab_size > bin->size) {
       fprintf(stderr, "String table section is out of bounds\n");
       return -1;
     }
 
-    elf->shstrtab = (char *)arena_alloc(arena, shstrtab_hdr->sh_size);
+    elf->shstrtab = (char *)arena_alloc(arena, elf->shstrtab_size);
     if (elf->shstrtab == NULL)
       return -1;
 
-    memcpy(elf->shstrtab, bin->data + shstrtab_hdr->sh_offset,
-           shstrtab_hdr->sh_size);
+    memcpy(elf->shstrtab, bin->data + elf->shstrtab_off, elf->shstrtab_size);
   }
 
   return 0;
