@@ -107,6 +107,9 @@ void *arena_alloc(Arena *arena, size_t size) {
 }
 
 void *arena_alloc_array(Arena *arena, size_t count, size_t size) {
+  if ((count > 0 && size > SIZE_MAX / count) || count < 0 || size < 0)
+    return NULL;
+
   return arena_alloc_align(arena, count * size, DEFAULT_ALIGNMENT);
 }
 

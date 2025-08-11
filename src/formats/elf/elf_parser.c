@@ -1,4 +1,5 @@
 #include <elf.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -144,6 +145,11 @@ int parse_elf(BinaryFile *bin, ELFInfo *elf) {
     if (elf->phdrs == NULL)
       return -1;
 
+    if (elf->phoff + (uint64_t)elf->phnum * elf->phentsize > bin->size) {
+      fprintf(stderr, "Program headers table size exceeds file size\n");
+      return -1;
+    }
+
     for (size_t i = 0; i < elf->phnum; i++) {
       size_t offset = elf->phoff + i * elf->phentsize;
       if (offset + elf->phentsize > bin->size) {
@@ -166,6 +172,11 @@ int parse_elf(BinaryFile *bin, ELFInfo *elf) {
         (Elf64_Shdr *)arena_alloc_array(arena, elf->shnum, sizeof(Elf64_Shdr));
     if (elf->shdrs == NULL)
       return -1;
+
+    if (elf->shoff + (uint64_t)elf->shnum * elf->shentsize > bin->size) {
+      fprintf(stderr, "Section headers table size exceeds file size\n");
+      return -1;
+    }
 
     for (size_t i = 0; i < elf->shnum; i++) {
       size_t offset = elf->shoff + i * elf->shentsize;

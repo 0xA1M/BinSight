@@ -1,8 +1,11 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <magic.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "core/binary.h"
 #include "core/format.h"
@@ -15,7 +18,7 @@ static const FormatHandler handlers[] = {
     {.name = "ELF", .format = FORMAT_ELF, .load = load_elf, .print = print_elf},
 };
 
-static BinaryFormat detect_format(const char *path) {
+static BinaryFormat detect_format(const int fd) {
   magic_t cookie = magic_open(MAGIC_MIME_TYPE | MAGIC_ERROR);
   if (cookie == NULL) {
     fprintf(stderr, "Failed to initialize libmagic\n");
@@ -28,55 +31,29 @@ static BinaryFormat detect_format(const char *path) {
     return FORMAT_UNKNOWN;
   }
 
-  const char *result = magic_file(cookie, path);
+  const char *result = magic_descriptor(cookie, fd);
   if (result == NULL) {
     fprintf(stderr, "File format detection failed: %s\n", magic_error(cookie));
     magic_close(cookie);
     return FORMAT_UNKNOWN;
   }
 
-  bool valid = false;
-  const char *exe_types[] = {
-      "application/x-executable",                     // Linux
-      "application/x-pie-executable",                 // Linux
-      "application/x-sharedlib",                      // Linux
-      "application/x-mach-binary",                    // macOS
-      "application/x-dosexec",                        // Windows
-      "application/vnd.microsoft.portable-executable" // Windows};
-  };
-
-  for (size_t i = 0; i < ARR_COUNT(exe_types); i++) {
-    if (strncmp(result, exe_types[i], strlen(exe_types[i])) == 0) {
-      valid = true;
-      break;
-    }
-  }
-
-  if (valid == false) {
-    const char *dir = "inode/directory";
-
-    if (strncmp(result, dir, strlen(dir)) == 0)
-      fprintf(stderr, "Path is a directory: %s\n", path);
-    else
-      fprintf(stderr, "Unsupported file type: %s\n", result);
-
-    magic_close(cookie);
-    return FORMAT_UNKNOWN;
-  }
-
   BinaryFormat fmt = get_binary_format(result);
+  if (fmt == FORMAT_UNKNOWN)
+    fprintf(stderr, "Unsupported file type: %s\n", result);
 
   magic_close(cookie);
   return fmt;
 }
 
 BinaryFile *load_binary(const char *path) {
-  if (!is_file_exist(path)) {
-    fprintf(stderr, "File does not exist or cannot be accessed: %s\n", path);
+  int fd = open(path, O_RDONLY);
+  if (fd == -1) {
+    fprintf(stderr, "Failed to open file: %s\n", strerror(errno));
     return NULL;
   }
 
-  BinaryFormat fmt = detect_format(path);
+  BinaryFormat fmt = detect_format(fd);
   if (fmt == FORMAT_UNKNOWN)
     return NULL;
 
@@ -94,12 +71,6 @@ BinaryFile *load_binary(const char *path) {
     return NULL;
   }
 
-  int fd = open(path, O_RDONLY);
-  if (fd == -1) {
-    fprintf(stderr, "Failed to open file: %s\n", strerror(errno));
-    return NULL;
-  }
-
   struct stat sb = {0};
   if (fstat(fd, &sb) == -1) {
     fprintf(stderr, "Failed to get file size: %s\n", strerror(errno));
@@ -108,6 +79,13 @@ BinaryFile *load_binary(const char *path) {
   }
 
   uint64_t f_size = sb.st_size;
+
+  if (S_ISDIR(sb.st_mode)) {
+    fprintf(stderr, "Path is a directory: %s\n", path);
+    close(fd);
+    return NULL;
+  }
+
   uint8_t *mapped_mem = mmap(NULL, f_size, PROT_READ, MAP_PRIVATE, fd, 0);
   close(fd);
 
