@@ -1,11 +1,10 @@
 #include <elf.h>
-#include <stdlib.h>
 
 #include "formats/elf/elf_loader.h"
 #include "formats/elf/elf_parser.h"
 
 int load_elf(BinaryFile *bin) {
-  ELFInfo *elf = init_elf();
+  ELFInfo *elf = init_elf(bin->arena);
   if (elf == NULL)
     return -1;
 
@@ -17,10 +16,8 @@ int load_elf(BinaryFile *bin) {
                     : bin->data[EI_DATA] == ELFDATA2MSB ? ENDIANNESS_BIG
                                                         : ENDIANNESS_UNKNOWN;
 
-  if (parse_elf(bin, elf) == -1) {
-    free(elf);
+  if (parse_elf(bin, elf) == -1)
     return -1;
-  }
 
   bin->parsed = (void *)elf;
   return 0;

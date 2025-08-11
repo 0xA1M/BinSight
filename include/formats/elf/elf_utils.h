@@ -6,16 +6,23 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "core/mem.h"
+
 typedef struct {
   Elf64_Ehdr *ehdr;
 
   Elf64_Phdr *phdrs;
   uint64_t phnum;
+  uint64_t phoff;
+  uint16_t phentsize;
 
   Elf64_Shdr *shdrs;
   uint64_t shnum;
+  uint64_t shoff;
+  uint16_t shentsize;
 
   char *shstrtab;
+  uint16_t shstrndx;
 
   Elf64_Sym *symtab;
   uint64_t sym_count;
@@ -29,8 +36,7 @@ typedef struct {
   int rela_count;
 } ELFInfo;
 
-ELFInfo *init_elf(void);
-void free_elf(void *elf_ptr);
+ELFInfo *init_elf(Arena *arena);
 
 static inline uint8_t read_byte(const uint8_t *buf, size_t offset) {
   return *(buf + offset);

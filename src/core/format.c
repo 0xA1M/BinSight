@@ -4,18 +4,15 @@
 #include <string.h>
 #include <sys/mman.h>
 
+#include "core/binary.h"
 #include "core/format.h"
+#include "core/mem.h"
 #include "core/utils.h"
 #include "formats/elf/elf_loader.h"
 #include "formats/elf/elf_print.h"
-#include "formats/elf/elf_utils.h"
 
 static const FormatHandler handlers[] = {
-    {.name = "ELF",
-     .format = FORMAT_ELF,
-     .load = load_elf,
-     .free = free_elf,
-     .print = print_elf},
+    {.name = "ELF", .format = FORMAT_ELF, .load = load_elf, .print = print_elf},
 };
 
 static BinaryFormat detect_format(const char *path) {
@@ -122,6 +119,12 @@ BinaryFile *load_binary(const char *path) {
   BinaryFile *binary = init_binary(path, fmt, f_size);
   if (binary == NULL) {
     munmap(mapped_mem, f_size);
+    return NULL;
+  }
+
+  binary->arena = arena_init();
+  if (binary->arena == NULL) {
+    free_binary(binary);
     return NULL;
   }
 

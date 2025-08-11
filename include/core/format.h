@@ -17,9 +17,6 @@ typedef struct FormatHandler {
   // Loader function
   int (*load)(BinaryFile *bin);
 
-  // Free function
-  void (*free)(void *parsed_data);
-
   // Print function
   void (*print)(void *parsed_data);
 } FormatHandler;

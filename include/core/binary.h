@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "core/mem.h"
+
 typedef struct FormatHandler FormatHandler;
 
 typedef enum BinaryBitness {
@@ -49,8 +51,11 @@ typedef struct BinaryFile {
   // Format-specific parsed data.
   void *parsed;
 
-  // Handler
+  // Format Handler
   const FormatHandler *handler;
+
+  // Arena for format-specific allocations
+  Arena *arena;
 } BinaryFile;
 
 BinaryFile *init_binary(const char *path, const BinaryFormat fmt,

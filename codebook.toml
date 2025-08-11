@@ -47,4 +47,9 @@ words = [
     "virt",
     "wextra",
     "wpedantic",
+    "phoff",
+    "shoff",
+    "phentsize",
+    "shentsize",
+    "shsize",
 ]

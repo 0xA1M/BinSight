@@ -3,7 +3,7 @@
 #include <sys/mman.h>
 
 #include "core/binary.h"
-#include "core/format.h"
+#include "core/mem.h"
 
 BinaryFile *init_binary(const char *path, const BinaryFormat fmt,
                         uint64_t f_size) {
@@ -29,11 +29,9 @@ void free_binary(BinaryFile *bin) {
   free(bin->arch);
   free(bin->build_id);
 
-  if (bin->handler && bin->handler->free && bin->parsed)
-    bin->handler->free(bin->parsed);
-
   if (bin->data)
     munmap(bin->data, bin->size);
 
+  arena_destroy(bin->arena);
   free(bin);
 }

@@ -1,64 +1,19 @@
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "core/mem.h"
 #include "formats/elf/elf_utils.h"
 
 /* Init & cleanup */
-ELFInfo *init_elf(void) {
-  ELFInfo *elf = calloc(1, sizeof(ELFInfo));
+ELFInfo *init_elf(Arena *arena) {
+  ELFInfo *elf = arena_alloc(arena, sizeof(ELFInfo));
   if (elf == NULL) {
-    fprintf(stderr, "Failed to allocate memory: %s\n", strerror(errno));
+    fprintf(stderr, "Failed to allocate memory for ELFInfo from arena\n");
     return NULL;
   }
 
-  elf->ehdr = NULL;
-  elf->phdrs = NULL;
-  elf->shdrs = NULL;
-  elf->shstrtab = NULL;
-  elf->strtab = NULL;
-  elf->symtab = NULL;
-  elf->rela = NULL;
-
   return elf;
-}
-
-void free_elf(void *elf_ptr) {
-  ELFInfo *elf = (ELFInfo *)elf_ptr;
-  if (!elf)
-    return;
-
-  // Free header and tables
-  free(elf->ehdr);
-  free(elf->phdrs);
-  free(elf->shdrs);
-
-  // Section name string table
-  free(elf->shstrtab);
-
-  // General string table
-  free(elf->strtab);
-  free(elf->dynstr);
-
-  // Free symbol table
-  if (elf->symtab) {
-    free(elf->symtab);
-    elf->symtab = NULL;
-  }
-
-  if (elf->dynsym) {
-    free(elf->dynsym);
-    elf->dynsym = NULL;
-  }
-
-  // Free relocation entries
-  if (elf->rela) {
-    free(elf->rela);
-    elf->rela = NULL;
-  }
-
-  free(elf);
 }
 
 /* Section headers utility functions */

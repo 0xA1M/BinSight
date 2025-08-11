@@ -1,21 +1,15 @@
-#include <errno.h>
+#include <elf.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "core/mem.h"
 #include "formats/elf/elf_parser.h"
 #include "formats/elf/elf_utils.h"
 
-static Elf64_Ehdr *parse_elf_hdr(const uint8_t *buffer,
-                                 const BinaryBitness bitness) {
+static int parse_elf_hdr(Elf64_Ehdr *header, const uint8_t *buffer,
+                         const BinaryBitness bitness) {
   if (buffer == NULL || bitness == BITNESS_UNKNOWN)
-    return NULL;
-
-  Elf64_Ehdr *header = calloc(1, sizeof(Elf64_Ehdr));
-  if (header == NULL) {
-    fprintf(stderr, "Failed to allocate memory to store ELF header: %s\n",
-            strerror(errno));
-    return NULL;
-  }
+    return -1;
 
   // Copy the magic bytes (EI_NIDENT = 16)
   memcpy(header->e_ident, buffer, EI_NIDENT);
@@ -39,22 +33,14 @@ static Elf64_Ehdr *parse_elf_hdr(const uint8_t *buffer,
   READ_FIELD_WORD(header, e_shnum, buffer, offset, is_little_endian);
   READ_FIELD_WORD(header, e_shstrndx, buffer, offset, is_little_endian);
 
-  return header;
+  return 0;
 }
 
-static Elf64_Phdr *parse_elf_phdr(const uint8_t *buffer,
-                                  const bool is_little_endian,
-                                  const BinaryBitness bitness) {
+static int parse_elf_phdr(Elf64_Phdr *p_header, const uint8_t *buffer,
+                          const bool is_little_endian,
+                          const BinaryBitness bitness) {
   if (buffer == NULL || bitness == BITNESS_UNKNOWN)
-    return NULL;
-
-  Elf64_Phdr *p_header = calloc(1, sizeof(Elf64_Phdr));
-  if (p_header == NULL) {
-    fprintf(stderr,
-            "Failed to allocate memory to store ELF program header: %s\n",
-            strerror(errno));
-    return NULL;
-  }
+    return -1;
 
   size_t offset = 0;
 
@@ -81,22 +67,14 @@ static Elf64_Phdr *parse_elf_phdr(const uint8_t *buffer,
     READ_FIELD_QWORD(p_header, p_align, buffer, offset, is_little_endian);
   }
 
-  return p_header;
+  return 0;
 }
 
-static Elf64_Shdr *parse_elf_shdr(const uint8_t *buffer,
-                                  const bool is_little_endian,
-                                  const BinaryBitness bitness) {
+static int parse_elf_shdr(Elf64_Shdr *s_header, const uint8_t *buffer,
+                          const bool is_little_endian,
+                          const BinaryBitness bitness) {
   if (buffer == NULL || bitness == BITNESS_UNKNOWN)
-    return NULL;
-
-  Elf64_Shdr *s_header = calloc(1, sizeof(Elf64_Shdr));
-  if (s_header == NULL) {
-    fprintf(stderr,
-            "Failed to allocate memory to store ELF section header: %s\n",
-            strerror(errno));
-    return NULL;
-  }
+    return -1;
 
   size_t offset = 0;
 
@@ -120,33 +98,7 @@ static Elf64_Shdr *parse_elf_shdr(const uint8_t *buffer,
   READ_FIELD_32_64(s_header, sh_entsize, buffer, offset, is_little_endian,
                    bitness);
 
-  return s_header;
-}
-
-static char *parse_elf_shstrtab(const uint8_t *buffer, size_t buf_size,
-                                const Elf64_Shdr *shdrs,
-                                const uint16_t shstrndx) {
-  if (!buffer || !shdrs || shstrndx == SHN_UNDEF) {
-    fprintf(stderr, "Invalid arguments to parse_elf_shstrtab\n");
-    return NULL;
-  }
-
-  const Elf64_Shdr *shstrtab_hdr = &shdrs[shstrndx];
-
-  // Validate string table bounds
-  if (shstrtab_hdr->sh_offset + shstrtab_hdr->sh_size > buf_size) {
-    fprintf(stderr, "String table section is out of bounds\n");
-    return NULL;
-  }
-
-  char *shstrtab = calloc(1, shstrtab_hdr->sh_size);
-  if (!shstrtab) {
-    fprintf(stderr, "Failed to allocate memory for shstrtab\n");
-    return NULL;
-  }
-
-  memcpy(shstrtab, buffer + shstrtab_hdr->sh_offset, shstrtab_hdr->sh_size);
-  return shstrtab;
+  return 0;
 }
 
 int parse_elf(BinaryFile *bin, ELFInfo *elf) {
@@ -160,112 +112,93 @@ int parse_elf(BinaryFile *bin, ELFInfo *elf) {
     return -1;
   }
 
-  Elf64_Ehdr *ehdr = parse_elf_hdr(bin->data, bin->bitness);
-  if (ehdr == NULL)
+  Arena *arena = bin->arena;
+
+  elf->ehdr = (Elf64_Ehdr *)arena_alloc(arena, sizeof(Elf64_Ehdr));
+  if (elf->ehdr == NULL)
     return -1;
 
+  if (parse_elf_hdr(elf->ehdr, bin->data, bin->bitness) == -1)
+    return -1;
+
+  elf->phnum = elf->ehdr->e_phnum;
+  elf->phoff = elf->ehdr->e_phoff;
+  elf->phentsize = elf->ehdr->e_phentsize;
+
+  elf->shnum = elf->ehdr->e_shnum;
+  elf->shoff = elf->ehdr->e_shoff;
+  elf->shentsize = elf->ehdr->e_shentsize;
+
+  elf->shstrndx = elf->ehdr->e_shstrndx;
+
   // Validate header values
-  if (ehdr->e_shnum > SHN_LORESERVE) {
+  if (elf->shnum > SHN_LORESERVE) {
     fprintf(stderr, "Suspicious number of program/section headers\n");
-    free(ehdr);
     return -1;
   }
 
   // Allocate array of program headers
-  Elf64_Phdr *phdrs = NULL;
-  if (ehdr->e_phnum > 0) {
-    phdrs = (Elf64_Phdr *)calloc(ehdr->e_phnum, sizeof(Elf64_Phdr));
-    if (phdrs == NULL) {
-      fprintf(stderr, "Failed to allocate memory for program headers: %s\n",
-              strerror(errno));
-      free(ehdr);
+  if (elf->phnum > 0) {
+    elf->phdrs =
+        (Elf64_Phdr *)arena_alloc_array(arena, elf->phnum, sizeof(Elf64_Phdr));
+    if (elf->phdrs == NULL)
       return -1;
-    }
 
-    for (size_t i = 0; i < ehdr->e_phnum; i++) {
-      size_t offset = ehdr->e_phoff + i * ehdr->e_phentsize;
-      if (offset + ehdr->e_phentsize > bin->size) {
+    for (size_t i = 0; i < elf->phnum; i++) {
+      size_t offset = elf->phoff + i * elf->phentsize;
+      if (offset + elf->phentsize > bin->size) {
         fprintf(stderr,
                 "program header %zu is out of bounds (offset: %zu, size: %hu, "
                 "buf_size: %zu)\n",
-                i, offset, ehdr->e_phentsize, bin->size);
-        free(ehdr);
-        free(phdrs);
+                i, offset, elf->phentsize, bin->size);
         return -1;
       }
 
-      Elf64_Phdr *phdr =
-          parse_elf_phdr(bin->data + offset, bin->endianness, bin->bitness);
-      if (phdr == NULL) {
-        free(ehdr);
-        free(phdrs);
+      if (parse_elf_phdr(&elf->phdrs[i], bin->data + offset, bin->endianness,
+                         bin->bitness) == -1)
         return -1;
-      }
-
-      phdrs[i] = *phdr;
-      free(phdr);
     }
   }
 
   // Allocate array of section headers
-  Elf64_Shdr *shdrs = NULL;
-  if (ehdr->e_shnum > 0) {
-    shdrs = (Elf64_Shdr *)calloc(ehdr->e_shnum, sizeof(Elf64_Shdr));
-    if (shdrs == NULL) {
-      fprintf(stderr, "Failed to allocate memory for section headers: %s\n",
-              strerror(errno));
-      free(ehdr);
-      free(phdrs);
+  if (elf->shnum > 0) {
+    elf->shdrs =
+        (Elf64_Shdr *)arena_alloc_array(arena, elf->shnum, sizeof(Elf64_Shdr));
+    if (elf->shdrs == NULL)
       return -1;
-    }
 
-    for (size_t i = 0; i < ehdr->e_shnum; i++) {
-      size_t offset = ehdr->e_shoff + i * ehdr->e_shentsize;
-      if (offset + ehdr->e_shentsize > bin->size) {
+    for (size_t i = 0; i < elf->shnum; i++) {
+      size_t offset = elf->shoff + i * elf->shentsize;
+      if (offset + elf->shentsize > bin->size) {
         fprintf(stderr,
                 "Section header %zu is out of bounds (offset: %zu, size: %hu, "
                 "buf_size: %zu)\n",
-                i, offset, ehdr->e_shentsize, bin->size);
-        free(ehdr);
-        free(phdrs);
-        free(shdrs);
+                i, offset, elf->shentsize, bin->size);
         return -1;
       }
 
-      Elf64_Shdr *shdr =
-          parse_elf_shdr(bin->data + offset, bin->endianness, bin->bitness);
-      if (shdr == NULL) {
-        free(ehdr);
-        free(phdrs);
-        free(shdrs);
+      if (parse_elf_shdr(&elf->shdrs[i], bin->data + offset, bin->endianness,
+                         bin->bitness) == -1)
         return -1;
-      }
-
-      shdrs[i] = *shdr;
-      free(shdr);
     }
   }
 
-  char *shstrtab = NULL;
-  if (shdrs && ehdr->e_shstrndx != SHN_UNDEF &&
-      ehdr->e_shstrndx < ehdr->e_shnum) {
+  if (elf->shdrs && elf->shstrndx != SHN_UNDEF && elf->shstrndx < elf->shnum) {
+    const Elf64_Shdr *shstrtab_hdr = &elf->shdrs[elf->shstrndx];
 
-    shstrtab =
-        parse_elf_shstrtab(bin->data, bin->size, shdrs, ehdr->e_shstrndx);
-    if (shstrtab == NULL) {
-      free(ehdr);
-      free(phdrs);
-      free(shdrs);
+    // Validate string table bounds
+    if (shstrtab_hdr->sh_offset + shstrtab_hdr->sh_size > bin->size) {
+      fprintf(stderr, "String table section is out of bounds\n");
       return -1;
     }
-  }
 
-  elf->ehdr = ehdr;
-  elf->phdrs = phdrs;
-  elf->phnum = ehdr->e_phnum;
-  elf->shdrs = shdrs;
-  elf->shnum = ehdr->e_shnum;
-  elf->shstrtab = shstrtab;
+    elf->shstrtab = (char *)arena_alloc(arena, shstrtab_hdr->sh_size);
+    if (elf->shstrtab == NULL)
+      return -1;
+
+    memcpy(elf->shstrtab, bin->data + shstrtab_hdr->sh_offset,
+           shstrtab_hdr->sh_size);
+  }
 
   return 0;
 }

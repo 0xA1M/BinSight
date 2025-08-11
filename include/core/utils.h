@@ -17,7 +17,10 @@
 #define ARR_COUNT(x) (sizeof(x) / sizeof((x)[0]))
 #define CSTR_LEN(x) ((sizeof(x) / sizeof((x)[0])) - 1)
 
-#define not_implemented() printf("Not Implemented!\n");
+#define MAX(x, y) ((x) > (y) ? (x) : (y))
+#define IS_POWER_2(x) (((x) != 0) && (((x) & ((x) - 1)) == 0))
+
+#define NOT_IMPLEMENTED() printf("Not Implemented!\n");
 
 #define BYTE 1
 #define WORD 2
