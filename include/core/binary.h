@@ -29,7 +29,7 @@ typedef enum BinaryFormat {
 } BinaryFormat;
 
 typedef struct BinaryFile {
-  char *path;
+  const char *path;
   BinaryFormat format;
   BinaryBitness bitness;
   BinaryEndianness endianness;
@@ -58,8 +58,7 @@ typedef struct BinaryFile {
   Arena *arena;
 } BinaryFile;
 
-BinaryFile *init_binary(const char *path, const BinaryFormat fmt,
-                        uint64_t f_size);
+BinaryFile *init_binary();
 void free_binary(BinaryFile *bin);
 
 #endif // BINARY_H

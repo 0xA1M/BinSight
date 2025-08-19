@@ -120,9 +120,7 @@ int parse_elf(BinaryFile *bin, ELFInfo *elf) {
     return -1;
   }
 
-  Arena *arena = bin->arena;
-
-  elf->ehdr = (Elf64_Ehdr *)arena_alloc(arena, sizeof(Elf64_Ehdr));
+  elf->ehdr = (Elf64_Ehdr *)arena_alloc(bin->arena, sizeof(Elf64_Ehdr));
   if (elf->ehdr == NULL)
     return -1;
 
@@ -139,16 +137,10 @@ int parse_elf(BinaryFile *bin, ELFInfo *elf) {
 
   elf->shstrndx = elf->ehdr->e_shstrndx;
 
-  // Validate header values
-  if (elf->shnum > SHN_LORESERVE) {
-    fprintf(stderr, "Suspicious number of program/section headers\n");
-    return -1;
-  }
-
   // Allocate array of program headers
   if (elf->phnum > 0) {
-    elf->phdrs =
-        (Elf64_Phdr *)arena_alloc_array(arena, elf->phnum, sizeof(Elf64_Phdr));
+    elf->phdrs = (Elf64_Phdr *)arena_alloc_array(bin->arena, elf->phnum,
+                                                 sizeof(Elf64_Phdr));
     if (elf->phdrs == NULL)
       return -1;
 
@@ -175,8 +167,8 @@ int parse_elf(BinaryFile *bin, ELFInfo *elf) {
 
   // Allocate array of section headers
   if (elf->shnum > 0) {
-    elf->shdrs =
-        (Elf64_Shdr *)arena_alloc_array(arena, elf->shnum, sizeof(Elf64_Shdr));
+    elf->shdrs = (Elf64_Shdr *)arena_alloc_array(bin->arena, elf->shnum,
+                                                 sizeof(Elf64_Shdr));
     if (elf->shdrs == NULL)
       return -1;
 
@@ -212,12 +204,12 @@ int parse_elf(BinaryFile *bin, ELFInfo *elf) {
       return -1;
     }
 
-    elf->shstrtab = (char *)arena_alloc(arena, elf->shstrtab_size);
+    elf->shstrtab = (char *)arena_alloc(bin->arena, elf->shstrtab_size);
     if (elf->shstrtab == NULL)
       return -1;
 
     memcpy(elf->shstrtab, bin->data + elf->shstrtab_off, elf->shstrtab_size);
   }
 
-  return 0;
+  return EXIT_SUCCESS;
 }

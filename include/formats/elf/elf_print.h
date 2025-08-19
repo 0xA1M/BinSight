@@ -240,6 +240,7 @@ static const TypeEntry phdr_type_names[] = {
     {PT_SUNWSTACK, "SUNWSTACK"},
 };
 
+void print_elf_phdr(const void *phdrs, const uint16_t index);
 void print_elf_phdrs(const void *phdrs, const uint16_t phnum);
 
 /* ELF section headers */
@@ -264,6 +265,8 @@ static const TypeEntry shdr_type_names[] = {
     {SHT_NUM, "NUM"},
 };
 
+void print_elf_shdr(const void *shdrs, const uint16_t index,
+                    const char *shstrtab, const uint64_t shstrtab_size);
 void print_elf_shdrs(const void *shdrs, const uint16_t shnum,
                      const char *shstrtab, const uint64_t shstrtab_size);
 

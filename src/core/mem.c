@@ -113,15 +113,16 @@ void *arena_alloc_array(Arena *arena, size_t count, size_t size) {
   return arena_alloc_align(arena, count * size, DEFAULT_ALIGNMENT);
 }
 
-void arena_reset(Arena *arena) {
-  if (arena == NULL)
-    return;
+const char *arena_strdup(Arena *arena, const char *str, size_t len) {
+  if (str == NULL)
+    return NULL;
 
-  Chunk *chunk = arena->head;
-  while (chunk != NULL) {
-    chunk->used = 0;
-    chunk = chunk->next;
-  }
+  char *str_dup = (char *)arena_alloc_array(arena, len + 1, sizeof(char));
+  if (str_dup == NULL)
+    return NULL;
 
-  arena->current = arena->head;
+  memcpy(str_dup, str, len);
+  str_dup[len] = '\0';
+
+  return (const char *)str_dup;
 }

@@ -1,3 +1,4 @@
+#include <elf.h>
 #include <stdio.h>
 
 #include "core/utils.h"
@@ -109,6 +110,25 @@ static const char *phdr_type_to_str(uint32_t type) {
   return get_name_from_id(type, phdr_type_names, ARR_COUNT(phdr_type_names));
 }
 
+void print_elf_phdr(const void *phdrs, const uint16_t index) {
+  if (phdrs == NULL) {
+    fprintf(stderr, "Cannot print program header: missing data.\n");
+    return;
+  }
+
+  printf("\nProgram Header: \n");
+  printf("  %-15s %-18s %-18s %-18s %-18s %-18s %-6s %-10s\n", "Type", "Offset",
+         "VirtAddr", "PhysAddr", "FileSiz", "MemSiz", "Flags", "Align");
+
+  const Elf64_Phdr *ph = &((Elf64_Phdr *)phdrs)[index];
+  printf("  %-15s 0x%016lx 0x%016lx 0x%016lx 0x%016lx 0x%016lx %c%c%c    "
+         "0x%lx\n",
+         phdr_type_to_str(ph->p_type), ph->p_offset, ph->p_vaddr, ph->p_paddr,
+         ph->p_filesz, ph->p_memsz, (ph->p_flags & PF_R) ? 'R' : '-',
+         (ph->p_flags & PF_W) ? 'W' : '-', (ph->p_flags & PF_X) ? 'X' : '-',
+         ph->p_align);
+}
+
 void print_elf_phdrs(const void *phdrs, const uint16_t phnum) {
   if (!phdrs) {
     fprintf(stderr, "Cannot print program headers: missing data.\n");
@@ -141,6 +161,30 @@ static const char *shdr_type_to_str(uint32_t type) {
   return get_name_from_id(type, shdr_type_names, ARR_COUNT(shdr_type_names));
 }
 
+void print_elf_shdr(const void *shdrs, const uint16_t index,
+                    const char *shstrtab, const uint64_t shstrtab_size) {
+  if (!shdrs) {
+    fprintf(stderr, "Cannot print section headers: missing data.\n");
+    return;
+  }
+
+  printf("\nSection Headers:\n");
+  printf("  [Nr] %-18s %-15s %-18s %-10s %-10s %-10s %-6s %-10s %-6s %-6s\n",
+         "Name", "Type", "Addr", "Offset", "Size", "EntSize", "Align", "Flags",
+         "Link", "Info");
+
+  const Elf64_Shdr *sh = &((Elf64_Shdr *)shdrs)[index];
+  const char *name = "???";
+  if (shstrtab && sh->sh_name < shstrtab_size)
+    name = &shstrtab[sh->sh_name];
+
+  printf("  [%2u] %-18s %-15s 0x%016lx 0x%08lx 0x%08lx 0x%08lx %-6lu 0x%08lx "
+         "%-6u %-6u\n",
+         index, name, shdr_type_to_str(sh->sh_type), sh->sh_addr, sh->sh_offset,
+         sh->sh_size, sh->sh_entsize, sh->sh_addralign, sh->sh_flags,
+         sh->sh_link, sh->sh_info);
+}
+
 void print_elf_shdrs(const void *shdrs, const uint16_t shnum,
                      const char *shstrtab, const uint64_t shstrtab_size) {
   if (!shdrs) {
@@ -168,10 +212,9 @@ void print_elf_shdrs(const void *shdrs, const uint16_t shnum,
   }
 }
 
-/* Print whole ELF */
+/* Print whole ELF (readelf style) */
 void print_elf(void *elf_ptr) {
   const ELFInfo *elf = (ELFInfo *)elf_ptr;
-
   if (!elf) {
     fprintf(stderr, "Cannot print ELF: ELFInfo struct is NULL.\n");
     return;

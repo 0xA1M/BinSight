@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "core/binary.h"
 #include "core/format.h"
@@ -18,5 +19,5 @@ int main(int argc, const char **argv) {
     binary->handler->print(binary->parsed);
 
   free_binary(binary);
-  return 0;
+  return EXIT_SUCCESS;
 }

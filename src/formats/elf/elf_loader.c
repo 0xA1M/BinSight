@@ -1,4 +1,5 @@
 #include <elf.h>
+#include <stdlib.h>
 
 #include "formats/elf/elf_loader.h"
 #include "formats/elf/elf_parser.h"
@@ -20,5 +21,6 @@ int load_elf(BinaryFile *bin) {
     return -1;
 
   bin->parsed = (void *)elf;
-  return 0;
+
+  return EXIT_SUCCESS;
 }

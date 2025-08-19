@@ -32,7 +32,6 @@ void arena_destroy(Arena *arena);
 void *arena_alloc(Arena *arena, size_t size);
 void *arena_alloc_array(Arena *arena, size_t count, size_t size);
 void *arena_alloc_align(Arena *arena, size_t size, size_t alignment);
-
-void arena_reset(Arena *arena);
+const char *arena_strdup(Arena *arena, const char *str, size_t len);
 
 #endif // MEM_H

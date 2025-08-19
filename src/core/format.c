@@ -54,8 +54,10 @@ BinaryFile *load_binary(const char *path) {
   }
 
   BinaryFormat fmt = detect_format(fd);
-  if (fmt == FORMAT_UNKNOWN)
+  if (fmt == FORMAT_UNKNOWN) {
+    close(fd);
     return NULL;
+  }
 
   const FormatHandler *handler = NULL;
   for (size_t i = 0; i < ARR_COUNT(handlers); i++) {
@@ -68,6 +70,7 @@ BinaryFile *load_binary(const char *path) {
   if (handler == NULL) {
     fprintf(stderr, "No handler found for format. %s format not supported!\n",
             print_binary_format(fmt));
+    close(fd);
     return NULL;
   }
 
@@ -94,11 +97,16 @@ BinaryFile *load_binary(const char *path) {
     return NULL;
   }
 
-  BinaryFile *binary = init_binary(path, fmt, f_size);
+  BinaryFile *binary = init_binary();
   if (binary == NULL) {
     munmap(mapped_mem, f_size);
     return NULL;
   }
+  binary->format = fmt;
+
+  binary->handler = handler;
+  binary->size = f_size;
+  binary->data = mapped_mem;
 
   binary->arena = arena_init();
   if (binary->arena == NULL) {
@@ -106,8 +114,7 @@ BinaryFile *load_binary(const char *path) {
     return NULL;
   }
 
-  binary->handler = handler;
-  binary->data = mapped_mem;
+  binary->path = arena_strdup(binary->arena, path, strlen(path));
 
   if (handler->load(binary) == -1) {
     free_binary(binary);

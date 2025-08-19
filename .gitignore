@@ -62,3 +62,6 @@ compile_commands.json
 
 # Valgrind reports
 vgcore.*
+
+# Clangd cache
+.cache/
