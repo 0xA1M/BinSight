@@ -2,6 +2,7 @@
 #define FORMAT_H
 
 #include "binary.h"
+#include "core/error.h"
 
 #define X_EXEC "application/x-executable"
 #define X_PIE_EXEC "application/x-pie-executable"
@@ -15,7 +16,7 @@ typedef struct FormatHandler {
   BinaryFormat format;
 
   // Loader function
-  int (*load)(BinaryFile *bin);
+  BError (*load)(BinaryFile *bin);
 
   // Print function
   void (*print)(void *parsed_data);

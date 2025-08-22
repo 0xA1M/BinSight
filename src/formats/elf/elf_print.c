@@ -1,15 +1,16 @@
 #include <elf.h>
 #include <stdio.h>
 
+#include "core/error.h"
 #include "core/utils.h"
 #include "formats/elf/elf_print.h"
 #include "formats/elf/elf_utils.h"
 
-static const char *get_name_from_id(uint32_t id, const TypeEntry *table,
+static const char *get_name_from_id(uint32_t id, const LT_Entry *table,
                                     uint64_t table_count) {
   for (size_t i = 0; i < table_count; i++)
     if (table[i].id == id)
-      return table[id].name;
+      return table[i].name;
 
   return "Unknown";
 }
@@ -72,10 +73,8 @@ static void print_e_ident(unsigned char *e_ident) {
 }
 
 void print_elf_ehdr(void *header) {
-  if (header == NULL) {
-    fprintf(stderr, "Failed to print elf header, header empty!\n");
-    return;
-  }
+  ASSERT_RET(header != NULL, ERR_ARG_NULL,
+             "Failed to print ELF header, header is NULL");
   Elf64_Ehdr *ehdr = (Elf64_Ehdr *)header;
 
   print_e_ident(ehdr->e_ident);
@@ -111,10 +110,8 @@ static const char *phdr_type_to_str(uint32_t type) {
 }
 
 void print_elf_phdr(const void *phdrs, const uint16_t index) {
-  if (phdrs == NULL) {
-    fprintf(stderr, "Cannot print program header: missing data.\n");
-    return;
-  }
+  ASSERT_RET(phdrs != NULL, ERR_ARG_NULL,
+             "Cannot print program header: missing data");
 
   printf("\nProgram Header: \n");
   printf("  %-15s %-18s %-18s %-18s %-18s %-18s %-6s %-10s\n", "Type", "Offset",
@@ -130,10 +127,8 @@ void print_elf_phdr(const void *phdrs, const uint16_t index) {
 }
 
 void print_elf_phdrs(const void *phdrs, const uint16_t phnum) {
-  if (!phdrs) {
-    fprintf(stderr, "Cannot print program headers: missing data.\n");
-    return;
-  }
+  ASSERT_RET(phdrs != NULL, ERR_ARG_NULL,
+             "Cannot print program headers: missing data");
 
   printf("\nProgram Headers: \n");
   printf("  %-15s %-18s %-18s %-18s %-18s %-18s %-6s %-10s\n", "Type", "Offset",
@@ -163,10 +158,8 @@ static const char *shdr_type_to_str(uint32_t type) {
 
 void print_elf_shdr(const void *shdrs, const uint16_t index,
                     const char *shstrtab, const uint64_t shstrtab_size) {
-  if (!shdrs) {
-    fprintf(stderr, "Cannot print section headers: missing data.\n");
-    return;
-  }
+  ASSERT_RET(shdrs != NULL, ERR_ARG_NULL,
+             "Cannot print section headers: missing data");
 
   printf("\nSection Headers:\n");
   printf("  [Nr] %-18s %-15s %-18s %-10s %-10s %-10s %-6s %-10s %-6s %-6s\n",
@@ -187,10 +180,8 @@ void print_elf_shdr(const void *shdrs, const uint16_t index,
 
 void print_elf_shdrs(const void *shdrs, const uint16_t shnum,
                      const char *shstrtab, const uint64_t shstrtab_size) {
-  if (!shdrs) {
-    fprintf(stderr, "Cannot print section headers: missing data.\n");
-    return;
-  }
+  ASSERT_RET(shdrs != NULL, ERR_ARG_NULL,
+             "Cannot print section headers: missing data");
 
   printf("\nSection Headers:\n");
   printf("  [Nr] %-18s %-15s %-18s %-10s %-10s %-10s %-6s %-10s %-6s %-6s\n",
@@ -212,15 +203,154 @@ void print_elf_shdrs(const void *shdrs, const uint16_t shnum,
   }
 }
 
+/* Print ELF Symbol Table */
+static const char *get_sym_bind_name(uint8_t info) {
+  return get_name_from_id(ELF64_ST_BIND(info), sym_bind_names,
+                          ARR_COUNT(sym_bind_names));
+}
+
+static const char *get_sym_type_name(uint8_t info) {
+  return get_name_from_id(ELF64_ST_TYPE(info), sym_type_names,
+                          ARR_COUNT(sym_type_names));
+}
+
+static const char *get_sym_visibility_name(uint8_t other) {
+  return get_name_from_id(ELF64_ST_VISIBILITY(other), sym_visibility_names,
+                          ARR_COUNT(sym_visibility_names));
+}
+
+void print_elf_sym(const void *syms_ptr, const uint64_t index,
+                   const char *strtab, const uint64_t strtab_size) {
+  ASSERT_RET(syms_ptr != NULL, ERR_ARG_NULL,
+             "Cannot print symbol: missing data");
+
+  const Elf64_Sym *sym = &((Elf64_Sym *)syms_ptr)[index];
+  const char *name = "???";
+  if (strtab && sym->st_name < strtab_size) {
+    name = &strtab[sym->st_name];
+  }
+
+  printf("%6lu: %016lx %6lu %-7s %-6s %-8s", index, sym->st_value, sym->st_size,
+         get_sym_type_name(ELF64_ST_TYPE(sym->st_info)),
+         get_sym_bind_name(ELF64_ST_BIND(sym->st_info)),
+         get_sym_visibility_name(ELF64_ST_VISIBILITY(sym->st_other)));
+
+  if (sym->st_shndx == SHN_UNDEF)
+    printf("  UND ");
+  else if (sym->st_shndx == SHN_ABS)
+    printf("  ABS ");
+  else if (sym->st_shndx == SHN_COMMON)
+    printf("  COM ");
+  else
+    printf("%5u ", sym->st_shndx);
+
+  printf("%s\n", name);
+}
+
+void print_elf_syms(const void *syms_ptr, const uint64_t sym_count,
+                    const char *strtab, const uint64_t strtab_size,
+                    const char *table_name) {
+  ASSERT_RET(syms_ptr != NULL, ERR_ARG_NULL,
+             "Cannot print symbols: missing data");
+
+  printf("\nSymbol table '%s' contains %lu entries:\n", table_name, sym_count);
+  printf("   Num: Value            Size   Type    Bind   Vis       Ndx Name\n");
+
+  const Elf64_Sym *sym_arr = (Elf64_Sym *)syms_ptr;
+  for (uint64_t i = 0; i < sym_count; ++i) {
+    print_elf_sym(sym_arr, i, strtab, strtab_size);
+  }
+}
+
+/* Print ELF Dynamic Section */
+static const char *get_dynamic_tag_name(uint64_t tag) {
+  if (tag >= DT_LOOS && tag <= DT_HIOS)
+    return "OS-SPECIFIC";
+  if (tag >= DT_LOPROC && tag <= DT_HIPROC)
+    return "PROC-SPECIFIC";
+
+  return get_name_from_id(tag, dyn_tag_names, ARR_COUNT(dyn_tag_names));
+}
+
+void print_elf_dynamic(const ELFInfo *elf) {
+  ASSERT_RET(elf != NULL, ERR_ARG_NULL,
+             "Cannot print dynamic section: ELFInfo struct is NULL");
+  ASSERT_RET(elf->dynamic != NULL, ERR_ARG_NULL,
+             "Cannot print dynamic section: missing dynamic data");
+
+  printf("\nDynamic section contains %lu entries:\n", elf->dynamic_count);
+  printf("  Tag                Type        Value\n");
+
+  for (size_t i = 0; i < elf->dynamic_count; ++i) {
+    const Elf64_Dyn *dyn_ent = &elf->dynamic[i];
+    const char *tag_name = get_dynamic_tag_name(dyn_ent->d_tag);
+
+    printf("  0x%016lx %-12s 0x%016lx", dyn_ent->d_tag, tag_name,
+           dyn_ent->d_un.d_val);
+
+    // Print interpretations for specific tags
+    switch (dyn_ent->d_tag) {
+    case DT_NEEDED:
+      if (elf->dynstr && dyn_ent->d_un.d_val < elf->dynstr_size) {
+        printf("  (%s)", elf->dynstr + dyn_ent->d_un.d_val);
+      }
+      break;
+    case DT_SONAME:
+      if (elf->dynstr && dyn_ent->d_un.d_val < elf->dynstr_size) {
+        printf("  Library soname: [%s]", elf->dynstr + dyn_ent->d_un.d_val);
+      }
+      break;
+    case DT_RPATH:
+      if (elf->dynstr && dyn_ent->d_un.d_val < elf->dynstr_size) {
+        printf("  RPath: [%s]", elf->dynstr + dyn_ent->d_un.d_val);
+      }
+      break;
+    case DT_RUNPATH:
+      if (elf->dynstr && dyn_ent->d_un.d_val < elf->dynstr_size) {
+        printf("  Runpath: [%s]", elf->dynstr + dyn_ent->d_un.d_val);
+      }
+      break;
+    default:
+      break;
+    }
+    printf("\n");
+  }
+
+  if (elf->lib) {
+    printf("\nNeeded Libraries:\n");
+    Needed_Lib *current = elf->lib;
+    while (current) {
+      printf("  %s\n", current->name);
+      current = current->next;
+    }
+  }
+
+  if (elf->soname) {
+    printf("Shared object name: [%s]\n", elf->soname);
+  }
+
+  if (elf->rpath) {
+    printf("RPath: [%s]\n", elf->rpath);
+  }
+
+  if (elf->runpath) {
+    printf("Runpath: [%s]\n", elf->runpath);
+  }
+}
+
 /* Print whole ELF (readelf style) */
 void print_elf(void *elf_ptr) {
+  ASSERT_RET(elf_ptr != NULL, ERR_ARG_NULL,
+             "Cannot print ELF: ELFInfo struct is NULL");
+
   const ELFInfo *elf = (ELFInfo *)elf_ptr;
-  if (!elf) {
-    fprintf(stderr, "Cannot print ELF: ELFInfo struct is NULL.\n");
-    return;
-  }
 
   print_elf_ehdr(elf->ehdr);
   print_elf_phdrs(elf->phdrs, elf->phnum);
   print_elf_shdrs(elf->shdrs, elf->shnum, elf->shstrtab, elf->shstrtab_size);
+  print_elf_syms(elf->dynsym, elf->dyn_count, elf->dynstr, elf->dynstr_size,
+                 ".dynsym");
+  print_elf_syms(elf->symtab, elf->sym_count, elf->strtab, elf->strtab_size,
+                 ".symtab");
+  print_elf_dynamic(elf);
 }

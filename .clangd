@@ -13,6 +13,7 @@ Diagnostics:
       "clang-analyzer-*",
       "bugprone-*",
     ]
+    Remove: [
+      "bugprone-easily-swappable-parameters"
+    ]
   UnusedIncludes: Strict
-  Suppress:
-    - "unused-includes:include/common.h"

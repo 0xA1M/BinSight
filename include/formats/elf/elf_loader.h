@@ -2,7 +2,8 @@
 #define ELF_LOADER_H
 
 #include "core/binary.h"
+#include "core/error.h"
 
-int load_elf(BinaryFile *bin);
+BError load_elf(BinaryFile *bin);
 
 #endif // ELF_LOADER_H

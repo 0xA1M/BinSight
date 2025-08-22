@@ -1,13 +1,17 @@
-#include <elf.h>
-#include <stdlib.h>
-
 #include "formats/elf/elf_loader.h"
 #include "formats/elf/elf_parser.h"
 
-int load_elf(BinaryFile *bin) {
+BError load_elf(BinaryFile *bin) {
+  CHECK(bin != NULL, ERR_ARG_NULL, "BinaryFile pointer is NULL");
+
   ELFInfo *elf = init_elf(bin->arena);
-  if (elf == NULL)
-    return -1;
+  CHECK(elf != NULL, ERR_MEM_ALLOC_FAILED,
+        "Failed to allocate memory for ELFInfo");
+
+  CHECK(EI_CLASS < bin->size, ERR_FORMAT_HEADER_TOO_SMALL,
+        "ELF identification class byte is out of bounds");
+  CHECK(EI_DATA < bin->size, ERR_FORMAT_HEADER_TOO_SMALL,
+        "ELF identification data byte is out of bounds");
 
   bin->bitness = bin->data[EI_CLASS] == ELFCLASS32   ? BITNESS_32
                  : bin->data[EI_CLASS] == ELFCLASS64 ? BITNESS_64
@@ -17,10 +21,9 @@ int load_elf(BinaryFile *bin) {
                     : bin->data[EI_DATA] == ELFDATA2MSB ? ENDIANNESS_BIG
                                                         : ENDIANNESS_UNKNOWN;
 
-  if (parse_elf(bin, elf) == -1)
-    return -1;
+  RET_IF_ERR(parse_elf(bin, elf));
 
   bin->parsed = (void *)elf;
 
-  return EXIT_SUCCESS;
+  return BERR_OK;
 }

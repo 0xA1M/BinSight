@@ -1,4 +1,3 @@
-#include <errno.h>
 #include <fcntl.h>
 #include <magic.h>
 #include <stdio.h>
@@ -7,119 +6,139 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "core/binary.h"
+#include "core/error.h"
 #include "core/format.h"
-#include "core/mem.h"
-#include "core/utils.h"
 #include "formats/elf/elf_loader.h"
 #include "formats/elf/elf_print.h"
 
+// TODO: use a hash map for handlers so plugins can register themselves with
 static const FormatHandler handlers[] = {
     {.name = "ELF", .format = FORMAT_ELF, .load = load_elf, .print = print_elf},
 };
 
+// TODO: Allow user to specify path to the magic db or use the default one on
+// the system <- robustly locate it (somehow)
 static BinaryFormat detect_format(const int fd) {
-  magic_t cookie = magic_open(MAGIC_MIME_TYPE | MAGIC_ERROR);
-  if (cookie == NULL) {
-    fprintf(stderr, "Failed to initialize libmagic\n");
-    return FORMAT_UNKNOWN;
-  }
+  BinaryFormat fmt = FORMAT_UNKNOWN;
 
-  if (magic_load(cookie, NULL) != 0) {
-    fprintf(stderr, "Failed to load magic database: %s\n", magic_error(cookie));
-    magic_close(cookie);
-    return FORMAT_UNKNOWN;
-  }
+  magic_t cookie = magic_open(MAGIC_MIME_TYPE | MAGIC_ERROR);
+  ASSERT_RET_VAL(cookie != NULL, FORMAT_UNKNOWN, ERR_FORMAT_MAGIC_INIT_FAILED,
+                 "Failed to initialize libmagic");
+
+  ASSERT_GOTO(magic_load(cookie, NULL) == 0, cleanup,
+              ERR_FORMAT_MAGIC_LOAD_FAILED,
+              "Failed to load libmagic database: %s", magic_errno(cookie));
 
   const char *result = magic_descriptor(cookie, fd);
-  if (result == NULL) {
-    fprintf(stderr, "File format detection failed: %s\n", magic_error(cookie));
-    magic_close(cookie);
-    return FORMAT_UNKNOWN;
-  }
+  ASSERT_GOTO(result != NULL, cleanup, ERR_FORMAT_MAGIC_DETECT_FAILED,
+              "Failed to detect file format: %s", magic_error(cookie));
 
-  BinaryFormat fmt = get_binary_format(result);
+  fmt = get_binary_format(result);
   if (fmt == FORMAT_UNKNOWN)
-    fprintf(stderr, "Unsupported file type: %s\n", result);
+    fprintf(stderr, "Unsupported file type: %s", result);
 
+cleanup:
   magic_close(cookie);
   return fmt;
 }
 
 BinaryFile *load_binary(const char *path) {
-  int fd = open(path, O_RDONLY);
-  if (fd == -1) {
-    fprintf(stderr, "Failed to open file: %s\n", strerror(errno));
-    return NULL;
-  }
-
-  BinaryFormat fmt = detect_format(fd);
-  if (fmt == FORMAT_UNKNOWN) {
-    close(fd);
-    return NULL;
-  }
-
+  int fd = -1;
+  BinaryFormat fmt = FORMAT_UNKNOWN;
   const FormatHandler *handler = NULL;
+  struct stat sb = {0};
+  uint64_t f_size = 0;
+  uint8_t *mapped_mem = NULL;
+  BinaryFile *binary = NULL;
+  BError err = BERR_OK;
+
+  fd = open(path, O_RDONLY);
+  ASSERT_GOTO_ERRNO(fd != -1, cleanup_fd, ERR_FILE_OPEN_FAILED,
+                    "Failed to open file '%s'", path);
+
+  fmt = detect_format(fd);
+  ASSERT_GOTO(fmt != FORMAT_UNKNOWN, cleanup_fd, ERR_FORMAT_UNKNOWN,
+              "Could not detect binary format for '%%s'", path);
+
   for (size_t i = 0; i < ARR_COUNT(handlers); i++) {
     if (handlers[i].format == fmt) {
       handler = &handlers[i];
       break;
     }
   }
+  ASSERT_GOTO(handler != NULL, cleanup_fd, ERR_FORMAT_HANDLER_NOT_FOUND,
+              "No handler found for '%s'. Format not supported",
+              lookup_binary_format(fmt));
 
-  if (handler == NULL) {
-    fprintf(stderr, "No handler found for format. %s format not supported!\n",
-            print_binary_format(fmt));
-    close(fd);
-    return NULL;
+  ASSERT_GOTO_ERRNO(fstat(fd, &sb) != -1, cleanup_fd, ERR_FILE_STAT_FAILED,
+                    "Failed to get file metadata for '%s'", path);
+
+  f_size = sb.st_size;
+  ASSERT_GOTO(f_size > 0, cleanup_fd, ERR_FILE_READ_FAILED,
+              "File '%s' is empty", path);
+
+  ASSERT_GOTO(!S_ISDIR(sb.st_mode), cleanup_fd, ERR_FILE_IS_DIRECTORY,
+              "Path '%s' is a directory", path);
+
+  mapped_mem = mmap(NULL, f_size, PROT_READ, MAP_PRIVATE, fd, 0);
+  ASSERT_GOTO_ERRNO(mapped_mem != MAP_FAILED, cleanup_fd, ERR_FILE_MMAP_FAILED,
+                    "Failed to map file '%s' into memory", path);
+
+  // File descriptor no longer needed
+  int close_res = close(fd);
+  if (close_res == -1) {
+    err = berr_from_errno(ERR_IO_UNKNOWN, "Failed to close file descriptor",
+                          __FILE__, __LINE__, __func__);
+    berr_print(&err);
   }
+  fd = -1;
 
-  struct stat sb = {0};
-  if (fstat(fd, &sb) == -1) {
-    fprintf(stderr, "Failed to get file size: %s\n", strerror(errno));
-    close(fd);
-    return NULL;
-  }
+  binary = init_binary();
+  ASSERT_GOTO(binary != NULL, cleanup_mmap, ERR_MEM_ALLOC_FAILED,
+              "Failed to initialize BinaryFile structure");
 
-  uint64_t f_size = sb.st_size;
-
-  if (S_ISDIR(sb.st_mode)) {
-    fprintf(stderr, "Path is a directory: %s\n", path);
-    close(fd);
-    return NULL;
-  }
-
-  uint8_t *mapped_mem = mmap(NULL, f_size, PROT_READ, MAP_PRIVATE, fd, 0);
-  close(fd);
-
-  if (mapped_mem == MAP_FAILED) {
-    fprintf(stderr, "Failed to map file into memory: %s\n", strerror(errno));
-    return NULL;
-  }
-
-  BinaryFile *binary = init_binary();
-  if (binary == NULL) {
-    munmap(mapped_mem, f_size);
-    return NULL;
-  }
   binary->format = fmt;
-
   binary->handler = handler;
   binary->size = f_size;
   binary->data = mapped_mem;
 
   binary->arena = arena_init();
-  if (binary->arena == NULL) {
-    free_binary(binary);
-    return NULL;
-  }
+  ASSERT_GOTO(binary->arena != NULL, cleanup_binary, ERR_MEM_ALLOC_FAILED,
+              "Failed to initialize memory arena for binary");
 
   binary->path = arena_strdup(binary->arena, path, strlen(path));
+  ASSERT_GOTO(binary->path != NULL, cleanup_binary, ERR_MEM_ALLOC_FAILED,
+              "Failed to duplicate binary path string");
 
-  if (handler->load(binary) == -1) {
-    free_binary(binary);
-    return NULL;
-  }
+  err = handler->load(binary);
+  ASSERT_GOTO(IS_OK(err), cleanup_binary, ERR_FORMAT_PARSE_FAILED,
+              "Failed to parse binary for format '%s'",
+              lookup_binary_format(fmt));
 
   return binary;
+
+cleanup_binary:
+  free_binary(binary);
+  mapped_mem = NULL;
+cleanup_mmap:
+  if (mapped_mem != NULL) {
+    int munmap_res = munmap(mapped_mem, f_size);
+    if (munmap_res == -1) {
+      BError munmap_err =
+          berr_from_errno(ERR_FILE_MMAP_FAILED, "Failed to unmap memory",
+                          __FILE__, __LINE__, __func__);
+      berr_print(&munmap_err);
+    }
+  }
+cleanup_fd:
+  if (fd != -1) {
+    int close_result = close(fd);
+    if (close_result == -1) {
+      BError close_err =
+          berr_from_errno(ERR_IO_UNKNOWN, "Failed to close file descriptor",
+                          __FILE__, __LINE__, __func__);
+      berr_print(&close_err);
+    }
+  }
+  return NULL;
 }

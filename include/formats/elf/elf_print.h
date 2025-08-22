@@ -1,16 +1,11 @@
 #ifndef ELF_PRINT_H
 #define ELF_PRINT_H
 
-#include <elf.h>
-#include <stdint.h>
-
-typedef struct {
-  uint32_t id;
-  const char *name;
-} TypeEntry;
+#include "core/utils.h"
+#include "formats/elf/elf_utils.h"
 
 /* ELF header */
-static const TypeEntry machine_names[] = {
+static const LT_Entry machine_names[] = {
     {EM_NONE, "No machine"},
     {EM_M32, "AT&T WE 32100"},
     {EM_SPARC, "SUN SPARC"},
@@ -190,7 +185,7 @@ static const TypeEntry machine_names[] = {
     {EM_AMDGPU, "AMD GPU"},
 };
 
-static const TypeEntry type_names[] = {
+static const LT_Entry type_names[] = {
     {ET_NONE, "No file type"},
     {ET_REL, "Relocatable file"},
     {ET_EXEC, "Executable file"},
@@ -202,7 +197,7 @@ static const TypeEntry type_names[] = {
     {ET_HIPROC, "Processor-specific range en"},
 };
 
-static const TypeEntry osabi_names[] = {
+static const LT_Entry osabi_names[] = {
     {ELFOSABI_SYSV, "UNIX - System V"},
     {ELFOSABI_HPUX, "HP-UX"},
     {ELFOSABI_NETBSD, "NetBSD"},
@@ -222,7 +217,7 @@ static const TypeEntry osabi_names[] = {
 void print_elf_ehdr(void *ehdr);
 
 /* ELF program headers */
-static const TypeEntry phdr_type_names[] = {
+static const LT_Entry phdr_type_names[] = {
     {PT_NULL, "NULL"},
     {PT_LOAD, "LOAD"},
     {PT_DYNAMIC, "DYNAMIC"},
@@ -244,7 +239,7 @@ void print_elf_phdr(const void *phdrs, const uint16_t index);
 void print_elf_phdrs(const void *phdrs, const uint16_t phnum);
 
 /* ELF section headers */
-static const TypeEntry shdr_type_names[] = {
+static const LT_Entry shdr_type_names[] = {
     {SHT_NULL, "NULL"},
     {SHT_PROGBITS, "PROGBITS"},
     {SHT_SYMTAB, "SYMTAB"},
@@ -269,6 +264,86 @@ void print_elf_shdr(const void *shdrs, const uint16_t index,
                     const char *shstrtab, const uint64_t shstrtab_size);
 void print_elf_shdrs(const void *shdrs, const uint16_t shnum,
                      const char *shstrtab, const uint64_t shstrtab_size);
+
+/* ELF Static/Dynamic Symbols*/
+static const LT_Entry sym_bind_names[] = {
+    {STB_LOCAL, "LOCAL"},   {STB_GLOBAL, "GLOBAL"}, {STB_WEAK, "WEAK"},
+    {STB_NUM, "NUM"},       {STB_LOOS, "LOOS"},     {STB_HIOS, "HIOS"},
+    {STB_LOPROC, "LOPROC"}, {STB_HIPROC, "HIPROC"},
+};
+
+static const LT_Entry sym_type_names[] = {
+    {STT_NOTYPE, "NOTYPE"},   {STT_OBJECT, "OBJECT"}, {STT_FUNC, "FUNC"},
+    {STT_SECTION, "SECTION"}, {STT_FILE, "FILE"},     {STT_COMMON, "COMMON"},
+    {STT_TLS, "TLS"},         {STT_NUM, "NUM"},       {STT_LOOS, "LOOS"},
+    {STT_HIOS, "HIOS"},       {STT_LOPROC, "LOPROC"}, {STT_HIPROC, "HIPROC"},
+};
+
+static const LT_Entry sym_visibility_names[] = {
+    {STV_DEFAULT, "DEFAULT"},
+    {STV_INTERNAL, "INTERNAL"},
+    {STV_HIDDEN, "HIDDEN"},
+    {STV_PROTECTED, "PROTECTED"},
+};
+
+void print_elf_sym(const void *syms_ptr, const uint64_t index,
+                   const char *strtab, const uint64_t strtab_size);
+void print_elf_syms(const void *syms_ptr, const uint64_t sym_count,
+                    const char *strtab, const uint64_t strtab_size,
+                    const char *table_name);
+
+/* ELF Dynamic Section*/
+static const LT_Entry dyn_tag_names[] = {
+    {DT_NULL, "(NULL)"},
+    {DT_NEEDED, "(NEEDED)"},
+    {DT_PLTRELSZ, "(PLTRELSZ)"},
+    {DT_PLTGOT, "(PLTGOT)"},
+    {DT_HASH, "(HASH)"},
+    {DT_STRTAB, "(STRTAB)"},
+    {DT_SYMTAB, "(SYMTAB)"},
+    {DT_RELA, "(RELA)"},
+    {DT_RELASZ, "(RELASZ)"},
+    {DT_RELAENT, "(RELAENT)"},
+    {DT_STRSZ, "(STRSZ)"},
+    {DT_SYMENT, "(SYMENT)"},
+    {DT_INIT, "(INIT)"},
+    {DT_FINI, "(FINI)"},
+    {DT_SONAME, "(SONAME)"},
+    {DT_RPATH, "(RPATH)"},
+    {DT_SYMBOLIC, "(SYMBOLIC)"},
+    {DT_REL, "(REL)"},
+    {DT_RELSZ, "(RELSZ)"},
+    {DT_RELENT, "(RELENT)"},
+    {DT_PLTREL, "(PLTREL)"},
+    {DT_DEBUG, "(DEBUG)"},
+    {DT_TEXTREL, "(TEXTREL)"},
+    {DT_JMPREL, "(JMPREL)"},
+    {DT_BIND_NOW, "(BIND_NOW)"},
+    {DT_INIT_ARRAY, "(INIT_ARRAY)"},
+    {DT_FINI_ARRAY, "(FINI_ARRAY)"},
+    {DT_INIT_ARRAYSZ, "(INIT_ARRAYSZ)"},
+    {DT_FINI_ARRAYSZ, "(FINI_ARRAYSZ)"},
+    {DT_RUNPATH, "(RUNPATH)"},
+    {DT_FLAGS, "(FLAGS)"},
+    {DT_ENCODING, "(ENCODING)"},
+    {DT_LOOS, "(LOOS)"},
+    {DT_HIOS, "(HIOS)"},
+    {DT_LOPROC, "(LOPROC)"},
+    {DT_HIPROC, "(HIPROC)"},
+    {DT_VERSYM, "(VERSYM)"},
+    {DT_RELACOUNT, "(RELACOUNT)"},
+    {DT_RELCOUNT, "(RELCOUNT)"},
+    {DT_FLAGS_1, "(FLAGS_1)"},
+    {DT_VERDEF, "(VERDEF)"},
+    {DT_VERDEFNUM, "(VERDEFNUM)"},
+    {DT_VERNEED, "(VERNEED)"},
+    {DT_VERNEEDNUM, "(VERNEEDNUM)"},
+    {DT_GNU_HASH, "(GNU_HASH)"},
+    {DT_AUXILIARY, "(AUXILIARY)"},
+    {DT_FILTER, "(FILTER)"},
+};
+
+void print_elf_dynamic(const ELFInfo *elf);
 
 /* Print whole ELF */
 void print_elf(void *elf_ptr);
