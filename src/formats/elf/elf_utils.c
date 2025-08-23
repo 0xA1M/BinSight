@@ -6,17 +6,17 @@
 
 ELFInfo *init_elf(Arena *arena) {
   ELFInfo *elf = arena_alloc(arena, sizeof(ELFInfo));
-  ASSERT_RET_VAL(elf != NULL, NULL, ERR_MEM_ALLOC_FAILED,
+  ASSERT_RET_VAL(arena, elf != NULL, NULL, ERR_MEM_ALLOC_FAILED,
                  "Failed to allocate memory for ELFInfo from arena");
 
   return elf;
 }
 
-int find_shdr(const Elf64_Shdr *shdrs, const uint64_t shnum,
+int find_shdr(Arena *arena, const Elf64_Shdr *shdrs, const uint64_t shnum,
               uint32_t target_type) {
-  ASSERT_RET_VAL(shdrs != NULL, -1, ERR_ARG_NULL,
+  ASSERT_RET_VAL(arena, shdrs != NULL, -1, ERR_ARG_NULL,
                  "Section headers pointer is NULL");
-  ASSERT_RET_VAL(shnum > 0, -1, ERR_ARG_INVALID,
+  ASSERT_RET_VAL(arena, shnum > 0, -1, ERR_ARG_INVALID,
                  "Number of section headers cannot be zero");
 
   for (size_t i = 0; i < shnum; i++)
@@ -26,11 +26,11 @@ int find_shdr(const Elf64_Shdr *shdrs, const uint64_t shnum,
   return -1;
 }
 
-int find_phdr(const Elf64_Phdr *phdrs, const uint64_t phnum,
+int find_phdr(Arena *arena, const Elf64_Phdr *phdrs, const uint64_t phnum,
               uint32_t target_type) {
-  ASSERT_RET_VAL(phdrs != NULL, -1, ERR_ARG_NULL,
+  ASSERT_RET_VAL(arena, phdrs != NULL, -1, ERR_ARG_NULL,
                  "Program headers pointer is NULL");
-  ASSERT_RET_VAL(phnum > 0, -1, ERR_ARG_INVALID,
+  ASSERT_RET_VAL(arena, phnum > 0, -1, ERR_ARG_INVALID,
                  "Number of program headers cannot be zero");
 
   for (size_t i = 0; i < phnum; i++)

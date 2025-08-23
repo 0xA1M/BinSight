@@ -214,7 +214,7 @@ static const LT_Entry osabi_names[] = {
     {ELFOSABI_STANDALONE, "Standalone (embedded) ABI"},
 };
 
-void print_elf_ehdr(void *ehdr);
+void print_elf_ehdr(Arena *arena, void *ehdr);
 
 /* ELF program headers */
 static const LT_Entry phdr_type_names[] = {
@@ -235,8 +235,8 @@ static const LT_Entry phdr_type_names[] = {
     {PT_SUNWSTACK, "SUNWSTACK"},
 };
 
-void print_elf_phdr(const void *phdrs, const uint16_t index);
-void print_elf_phdrs(const void *phdrs, const uint16_t phnum);
+void print_elf_phdr(Arena *arena, const void *phdrs, const uint16_t index);
+void print_elf_phdrs(Arena *arena, const void *phdrs, const uint16_t phnum);
 
 /* ELF section headers */
 static const LT_Entry shdr_type_names[] = {
@@ -260,9 +260,9 @@ static const LT_Entry shdr_type_names[] = {
     {SHT_NUM, "NUM"},
 };
 
-void print_elf_shdr(const void *shdrs, const uint16_t index,
+void print_elf_shdr(Arena *arena, const void *shdrs, const uint16_t index,
                     const char *shstrtab, const uint64_t shstrtab_size);
-void print_elf_shdrs(const void *shdrs, const uint16_t shnum,
+void print_elf_shdrs(Arena *arena, const void *shdrs, const uint16_t shnum,
                      const char *shstrtab, const uint64_t shstrtab_size);
 
 /* ELF Static/Dynamic Symbols*/
@@ -286,11 +286,11 @@ static const LT_Entry sym_visibility_names[] = {
     {STV_PROTECTED, "PROTECTED"},
 };
 
-void print_elf_sym(const void *syms_ptr, const uint64_t index,
+void print_elf_sym(Arena *arena, const void *syms_ptr, const uint64_t index,
                    const char *strtab, const uint64_t strtab_size);
-void print_elf_syms(const void *syms_ptr, const uint64_t sym_count,
-                    const char *strtab, const uint64_t strtab_size,
-                    const char *table_name);
+void print_elf_syms(Arena *arena, const void *syms_ptr,
+                    const uint64_t sym_count, const char *strtab,
+                    const uint64_t strtab_size, const char *table_name);
 
 /* ELF Dynamic Section*/
 static const LT_Entry dyn_tag_names[] = {
@@ -343,9 +343,9 @@ static const LT_Entry dyn_tag_names[] = {
     {DT_FILTER, "(FILTER)"},
 };
 
-void print_elf_dynamic(const ELFInfo *elf);
+void print_elf_dynamic(Arena *arena, const ELFInfo *elf);
 
 /* Print whole ELF */
-void print_elf(void *elf_ptr);
+void print_elf(Arena *arena, void *elf_ptr);
 
 #endif // ELF_PRINT_H

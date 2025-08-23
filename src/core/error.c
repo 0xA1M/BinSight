@@ -3,13 +3,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "core/binary.h"
 #include "core/error.h"
 #include "core/mem.h"
-
-static Arena *g_berr_arena = NULL;
-
-static Arena *berr_get_arena(void) { return g_berr_arena; }
+#include "core/utils.h"
 
 static char *dup_fmt(Arena *arena, const char *fmt, va_list ap) {
   if (arena == NULL)
@@ -32,11 +28,9 @@ static char *dup_fmt(Arena *arena, const char *fmt, va_list ap) {
   return buf;
 }
 
-BError berr_new(BErrorCode code, const char *fmt, const char *file, int line,
-                const char *func, ...) {
-  Arena *arena = berr_get_arena();
+BError berr_new(Arena *arena, BErrorCode code, const char *fmt,
+                const char *file, int line, const char *func, ...) {
   char *user_msg = NULL;
-
   if (fmt != NULL) {
     va_list ap;
     va_start(ap, func);
@@ -72,11 +66,9 @@ BError berr_new(BErrorCode code, const char *fmt, const char *file, int line,
       .code = code, .file = file, .line = line, .func = func, .err_msg = buf};
 }
 
-BError berr_from_errno(BErrorCode code, const char *fmt, const char *file,
-                       int line, const char *func, ...) {
-  Arena *arena = berr_get_arena();
+BError berr_from_errno(Arena *arena, BErrorCode code, const char *fmt,
+                       const char *file, int line, const char *func, ...) {
   char *user_msg = NULL;
-
   if (fmt != NULL) {
     va_list ap;
     va_start(ap);
@@ -85,7 +77,9 @@ BError berr_from_errno(BErrorCode code, const char *fmt, const char *file,
   }
 
   const char *code_str = berr_code_to_str(code);
-  const char *errno_str = strerror(errno);
+
+  char errno_str[256] = "";
+  strerror_r(errno, errno_str, CSTR_LEN(errno_str));
 
   size_t total_len =
       strlen(code_str) + 3 +                  // For "[] "
@@ -108,8 +102,6 @@ BError berr_from_errno(BErrorCode code, const char *fmt, const char *file,
       .code = code, .file = file, .line = line, .func = func, .err_msg = buf};
 }
 
-void berr_set_arena(Arena *arena) { g_berr_arena = arena; }
-
 const char *berr_code_to_str(BErrorCode code) {
   for (size_t i = 0; i < ARR_COUNT(BErrorCodeStrTable); i++)
     if (BErrorCodeStrTable[i].id == code)
@@ -128,6 +120,20 @@ void berr_print(const BError *err) {
 
   fprintf(stderr, "Error: %s", berr_msg(err));
   if (err->file && err->func)
-    fprintf(stderr, "  at %s:%d (in %s)", err->file, err->line, err->func);
+    fprintf(stderr, " at %s:%d (in %s)", err->file, err->line, err->func);
   fprintf(stderr, "\n");
+}
+
+void log_error(const char *fmt, ...) {
+  if (fmt == NULL)
+    return;
+
+  va_list args;
+  va_start(args, fmt);
+
+  fprintf(stderr, "Error: ");
+  vfprintf(stderr, fmt, args);
+  fprintf(stderr, " at %s:%d (in %s)\n", __FILE__, __LINE__, __func__);
+
+  va_end(args);
 }

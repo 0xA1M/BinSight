@@ -5,8 +5,8 @@
 #include "core/format.h"
 #include "core/utils.h"
 
-BinaryFormat get_binary_format(const char *mime_str) {
-  ASSERT_RET_VAL(mime_str != NULL, FORMAT_UNKNOWN, ERR_FORMAT_UNKNOWN,
+BinaryFormat get_binary_format(Arena *arena, const char *mime_str) {
+  ASSERT_RET_VAL(arena, mime_str != NULL, FORMAT_UNKNOWN, ERR_FORMAT_UNKNOWN,
                  "Unknown binary file format");
 
   if (strncmp(mime_str, X_EXEC, CSTR_LEN(X_EXEC)) == 0 ||
@@ -38,9 +38,10 @@ const char *lookup_binary_format(BinaryFormat fmt) {
   }
 }
 
-void print_section_hex_dump(const char *section_name, const uint8_t *buffer,
-                            size_t size, const uintptr_t section_offset) {
-  ASSERT_RET(buffer != NULL && size != 0, ERR_FORMAT_UNKNOWN,
+void print_section_hex_dump(Arena *arena, const char *section_name,
+                            const uint8_t *buffer, size_t size,
+                            const uintptr_t section_offset) {
+  ASSERT_RET(arena, buffer != NULL && size != 0, ERR_FORMAT_UNKNOWN,
              "Cannot dump section '%s': buffer is NULL or size is 0",
              section_name ? section_name : "UNKNOWN");
 
@@ -85,9 +86,9 @@ void print_section_hex_dump(const char *section_name, const uint8_t *buffer,
   }
 }
 
-void print_buffer_hex_dump(const uint8_t *buffer, size_t size,
+void print_buffer_hex_dump(Arena *arena, const uint8_t *buffer, size_t size,
                            const uintptr_t start_address) {
-  ASSERT_RET(buffer != NULL && size != 0, ERR_FORMAT_UNKNOWN,
+  ASSERT_RET(arena, buffer != NULL && size != 0, ERR_FORMAT_UNKNOWN,
              "Buffer is NULL or size is 0. Nothing to dump");
 
   const size_t line_len = 16;

@@ -72,8 +72,8 @@ static void print_e_ident(unsigned char *e_ident) {
   printf("  ABI Version:                       %d\n", e_ident[EI_ABIVERSION]);
 }
 
-void print_elf_ehdr(void *header) {
-  ASSERT_RET(header != NULL, ERR_ARG_NULL,
+void print_elf_ehdr(Arena *arena, void *header) {
+  ASSERT_RET(arena, header != NULL, ERR_ARG_NULL,
              "Failed to print ELF header, header is NULL");
   Elf64_Ehdr *ehdr = (Elf64_Ehdr *)header;
 
@@ -109,8 +109,8 @@ static const char *phdr_type_to_str(uint32_t type) {
   return get_name_from_id(type, phdr_type_names, ARR_COUNT(phdr_type_names));
 }
 
-void print_elf_phdr(const void *phdrs, const uint16_t index) {
-  ASSERT_RET(phdrs != NULL, ERR_ARG_NULL,
+void print_elf_phdr(Arena *arena, const void *phdrs, const uint16_t index) {
+  ASSERT_RET(arena, phdrs != NULL, ERR_ARG_NULL,
              "Cannot print program header: missing data");
 
   printf("\nProgram Header: \n");
@@ -126,8 +126,8 @@ void print_elf_phdr(const void *phdrs, const uint16_t index) {
          ph->p_align);
 }
 
-void print_elf_phdrs(const void *phdrs, const uint16_t phnum) {
-  ASSERT_RET(phdrs != NULL, ERR_ARG_NULL,
+void print_elf_phdrs(Arena *arena, const void *phdrs, const uint16_t phnum) {
+  ASSERT_RET(arena, phdrs != NULL, ERR_ARG_NULL,
              "Cannot print program headers: missing data");
 
   printf("\nProgram Headers: \n");
@@ -156,9 +156,9 @@ static const char *shdr_type_to_str(uint32_t type) {
   return get_name_from_id(type, shdr_type_names, ARR_COUNT(shdr_type_names));
 }
 
-void print_elf_shdr(const void *shdrs, const uint16_t index,
+void print_elf_shdr(Arena *arena, const void *shdrs, const uint16_t index,
                     const char *shstrtab, const uint64_t shstrtab_size) {
-  ASSERT_RET(shdrs != NULL, ERR_ARG_NULL,
+  ASSERT_RET(arena, shdrs != NULL, ERR_ARG_NULL,
              "Cannot print section headers: missing data");
 
   printf("\nSection Headers:\n");
@@ -178,9 +178,9 @@ void print_elf_shdr(const void *shdrs, const uint16_t index,
          sh->sh_link, sh->sh_info);
 }
 
-void print_elf_shdrs(const void *shdrs, const uint16_t shnum,
+void print_elf_shdrs(Arena *arena, const void *shdrs, const uint16_t shnum,
                      const char *shstrtab, const uint64_t shstrtab_size) {
-  ASSERT_RET(shdrs != NULL, ERR_ARG_NULL,
+  ASSERT_RET(arena, shdrs != NULL, ERR_ARG_NULL,
              "Cannot print section headers: missing data");
 
   printf("\nSection Headers:\n");
@@ -219,9 +219,9 @@ static const char *get_sym_visibility_name(uint8_t other) {
                           ARR_COUNT(sym_visibility_names));
 }
 
-void print_elf_sym(const void *syms_ptr, const uint64_t index,
+void print_elf_sym(Arena *arena, const void *syms_ptr, const uint64_t index,
                    const char *strtab, const uint64_t strtab_size) {
-  ASSERT_RET(syms_ptr != NULL, ERR_ARG_NULL,
+  ASSERT_RET(arena, syms_ptr != NULL, ERR_ARG_NULL,
              "Cannot print symbol: missing data");
 
   const Elf64_Sym *sym = &((Elf64_Sym *)syms_ptr)[index];
@@ -247,10 +247,10 @@ void print_elf_sym(const void *syms_ptr, const uint64_t index,
   printf("%s\n", name);
 }
 
-void print_elf_syms(const void *syms_ptr, const uint64_t sym_count,
-                    const char *strtab, const uint64_t strtab_size,
-                    const char *table_name) {
-  ASSERT_RET(syms_ptr != NULL, ERR_ARG_NULL,
+void print_elf_syms(Arena *arena, const void *syms_ptr,
+                    const uint64_t sym_count, const char *strtab,
+                    const uint64_t strtab_size, const char *table_name) {
+  ASSERT_RET(arena, syms_ptr != NULL, ERR_ARG_NULL,
              "Cannot print symbols: missing data");
 
   printf("\nSymbol table '%s' contains %lu entries:\n", table_name, sym_count);
@@ -258,7 +258,7 @@ void print_elf_syms(const void *syms_ptr, const uint64_t sym_count,
 
   const Elf64_Sym *sym_arr = (Elf64_Sym *)syms_ptr;
   for (uint64_t i = 0; i < sym_count; ++i) {
-    print_elf_sym(sym_arr, i, strtab, strtab_size);
+    print_elf_sym(arena, sym_arr, i, strtab, strtab_size);
   }
 }
 
@@ -272,10 +272,10 @@ static const char *get_dynamic_tag_name(uint64_t tag) {
   return get_name_from_id(tag, dyn_tag_names, ARR_COUNT(dyn_tag_names));
 }
 
-void print_elf_dynamic(const ELFInfo *elf) {
-  ASSERT_RET(elf != NULL, ERR_ARG_NULL,
+void print_elf_dynamic(Arena *arena, const ELFInfo *elf) {
+  ASSERT_RET(arena, elf != NULL, ERR_ARG_NULL,
              "Cannot print dynamic section: ELFInfo struct is NULL");
-  ASSERT_RET(elf->dynamic != NULL, ERR_ARG_NULL,
+  ASSERT_RET(arena, elf->dynamic != NULL, ERR_ARG_NULL,
              "Cannot print dynamic section: missing dynamic data");
 
   printf("\nDynamic section contains %lu entries:\n", elf->dynamic_count);
@@ -339,18 +339,19 @@ void print_elf_dynamic(const ELFInfo *elf) {
 }
 
 /* Print whole ELF (readelf style) */
-void print_elf(void *elf_ptr) {
-  ASSERT_RET(elf_ptr != NULL, ERR_ARG_NULL,
+void print_elf(Arena *arena, void *elf_ptr) {
+  ASSERT_RET(arena, elf_ptr != NULL, ERR_ARG_NULL,
              "Cannot print ELF: ELFInfo struct is NULL");
 
   const ELFInfo *elf = (ELFInfo *)elf_ptr;
 
-  print_elf_ehdr(elf->ehdr);
-  print_elf_phdrs(elf->phdrs, elf->phnum);
-  print_elf_shdrs(elf->shdrs, elf->shnum, elf->shstrtab, elf->shstrtab_size);
-  print_elf_syms(elf->dynsym, elf->dyn_count, elf->dynstr, elf->dynstr_size,
-                 ".dynsym");
-  print_elf_syms(elf->symtab, elf->sym_count, elf->strtab, elf->strtab_size,
-                 ".symtab");
-  print_elf_dynamic(elf);
+  print_elf_ehdr(arena, elf->ehdr);
+  print_elf_phdrs(arena, elf->phdrs, elf->phnum);
+  print_elf_shdrs(arena, elf->shdrs, elf->shnum, elf->shstrtab,
+                  elf->shstrtab_size);
+  print_elf_syms(arena, elf->dynsym, elf->dyn_count, elf->dynstr,
+                 elf->dynstr_size, ".dynsym");
+  print_elf_syms(arena, elf->symtab, elf->sym_count, elf->strtab,
+                 elf->strtab_size, ".symtab");
+  print_elf_dynamic(arena, elf);
 }

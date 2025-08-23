@@ -19,7 +19,7 @@ typedef struct FormatHandler {
   BError (*load)(BinaryFile *bin);
 
   // Print function
-  void (*print)(void *parsed_data);
+  void (*print)(Arena *arena, void *parsed_data);
 } FormatHandler;
 
 BinaryFile *load_binary(const char *path);

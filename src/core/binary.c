@@ -7,8 +7,21 @@
 
 BinaryFile *init_binary() {
   BinaryFile *binary = calloc(1, sizeof(BinaryFile));
-  ASSERT_RET_VAL_ERRNO(binary != NULL, NULL, ERR_MEM_ALLOC_FAILED,
-                       "Failed to allocate memory for BinaryFile");
+  if (binary == NULL) {
+    log_error("Failed to allocate memory for BinaryFile structure");
+    return NULL;
+  }
+
+  binary->arena = arena_init();
+  if (binary == NULL) {
+    log_error("Failed to initialize memory arena");
+    free(binary);
+    return NULL;
+  }
+
+  binary->data = NULL;
+  binary->parsed = NULL;
+  binary->handler = NULL;
 
   return binary;
 }
@@ -17,15 +30,9 @@ void free_binary(BinaryFile *bin) {
   if (bin == NULL)
     return;
 
-  if (bin->data != NULL) {
-    int munmap_res = munmap(bin->data, bin->size);
-    if (munmap_res != 0) {
-      BError err =
-          berr_from_errno(ERR_FILE_UNMMAP_FAILED, "Failed to unmap memory",
-                          __FILE__, __LINE__, __func__);
-      berr_print(&err);
-    }
-  }
+  if (bin->data != NULL && bin->size > 0)
+    ASSERT(bin->arena, munmap(bin->data, bin->size) == 0,
+           ERR_FILE_UNMMAP_FAILED, "Failed to unmap memory");
 
   arena_destroy(bin->arena);
   free(bin);

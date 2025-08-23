@@ -21,6 +21,7 @@ typedef enum : uint8_t {
   ERR_FILE_MMAP_FAILED,
   ERR_FILE_UNMMAP_FAILED,
   ERR_FILE_IS_DIRECTORY,
+  ERR_FILE_IS_SYM_LINK,
   ERR_FILE_PERMISSIONS,
   ERR_IO_UNKNOWN,
 
@@ -90,29 +91,38 @@ typedef struct {
 
 // CHECK: For functions returning BError. Creates and returns a new error if
 // condition is false.
-#define CHECK(cond, err_code, fmt, ...)                                        \
+#define CHECK(arena, cond, err_code, fmt, ...)                                 \
   do {                                                                         \
     if (!(cond)) {                                                             \
-      return berr_new((err_code), fmt, __FILE__, __LINE__, __func__,           \
+      return berr_new((arena), (err_code), fmt, __FILE__, __LINE__, __func__,  \
                       ##__VA_ARGS__);                                          \
     }                                                                          \
   } while (0)
 
 // CHECK_ERRNO: Similar to CHECK, but includes errno description.
-#define CHECK_ERRNO(cond, err_code, fmt, ...)                                  \
+#define CHECK_ERRNO(arena, cond, err_code, fmt, ...)                           \
   do {                                                                         \
     if (!(cond)) {                                                             \
-      return berr_from_errno((err_code), fmt, __FILE__, __LINE__, __func__,    \
-                             ##__VA_ARGS__);                                   \
+      return berr_from_errno((arena), (err_code), fmt, __FILE__, __LINE__,     \
+                             __func__, ##__VA_ARGS__);                         \
+    }                                                                          \
+  } while (0)
+
+#define ASSERT(arena, cond, err_code, fmt, ...)                                \
+  do {                                                                         \
+    if (!(cond)) {                                                             \
+      BError _e = berr_new((arena), (err_code), fmt, __FILE__, __LINE__,       \
+                           __func__, ##__VA_ARGS__);                           \
+      berr_print(&_e);                                                         \
     }                                                                          \
   } while (0)
 
 // ASSERT_RET: For functions return void.
-#define ASSERT_RET(cond, err_code, fmt, ...)                                   \
+#define ASSERT_RET(arena, cond, err_code, fmt, ...)                            \
   do {                                                                         \
     if (!(cond)) {                                                             \
-      BError _e = berr_new((err_code), fmt, __FILE__, __LINE__, __func__,      \
-                           ##__VA_ARGS__);                                     \
+      BError _e = berr_new((arena), (err_code), fmt, __FILE__, __LINE__,       \
+                           __func__, ##__VA_ARGS__);                           \
       berr_print(&_e);                                                         \
       return;                                                                  \
     }                                                                          \
@@ -120,11 +130,11 @@ typedef struct {
 
 // ASSERT_RET_VAL: For functions returning non-BError types.
 // Creates, prints, and returns a specified value if condition is false.
-#define ASSERT_RET_VAL(cond, ret_val, err_code, fmt, ...)                      \
+#define ASSERT_RET_VAL(arena, cond, ret_val, err_code, fmt, ...)               \
   do {                                                                         \
     if (!(cond)) {                                                             \
-      BError _e = berr_new((err_code), fmt, __FILE__, __LINE__, __func__,      \
-                           ##__VA_ARGS__);                                     \
+      BError _e = berr_new((arena), (err_code), fmt, __FILE__, __LINE__,       \
+                           __func__, ##__VA_ARGS__);                           \
       berr_print(&_e);                                                         \
       return (ret_val);                                                        \
     }                                                                          \
@@ -132,11 +142,11 @@ typedef struct {
 
 // ASSERT_RET_VAL_ERRNO: Similar to ASSERT_RET_VAL, but includes errno
 // description.
-#define ASSERT_RET_VAL_ERRNO(cond, ret_val, err_code, fmt, ...)                \
+#define ASSERT_RET_VAL_ERRNO(arena, cond, ret_val, err_code, fmt, ...)         \
   do {                                                                         \
     if (!(cond)) {                                                             \
-      BError _e = berr_from_errno((err_code), fmt, __FILE__, __LINE__,         \
-                                  __func__, ##__VA_ARGS__);                    \
+      BError _e = berr_from_errno((arena), (err_code), fmt, __FILE__,          \
+                                  __LINE__, __func__, ##__VA_ARGS__);          \
       berr_print(&_e);                                                         \
       return (ret_val);                                                        \
     }                                                                          \
@@ -144,11 +154,11 @@ typedef struct {
 
 // ASSERT_GOTO: For functions with complex cleanup paths (e.g., using goto
 // error_label). Creates, prints, and jumps to a label if condition is false.
-#define ASSERT_GOTO(cond, label, err_code, fmt, ...)                           \
+#define ASSERT_GOTO(arena, cond, label, err_code, fmt, ...)                    \
   do {                                                                         \
     if (!(cond)) {                                                             \
-      BError _e = berr_new((err_code), fmt, __FILE__, __LINE__, __func__,      \
-                           ##__VA_ARGS__);                                     \
+      BError _e = berr_new((arena), (err_code), fmt, __FILE__, __LINE__,       \
+                           __func__, ##__VA_ARGS__);                           \
       berr_print(&_e);                                                         \
       goto label;                                                              \
     }                                                                          \
@@ -156,11 +166,11 @@ typedef struct {
 
 // ASSERT_GOTO_ERRNO: Similar to ASSERT_GOTO, but includes errno
 // description.
-#define ASSERT_GOTO_ERRNO(cond, label, err_code, fmt, ...)                     \
+#define ASSERT_GOTO_ERRNO(arena, cond, label, err_code, fmt, ...)              \
   do {                                                                         \
     if (!(cond)) {                                                             \
-      BError _e = berr_from_errno((err_code), fmt, __FILE__, __LINE__,         \
-                                  __func__, ##__VA_ARGS__);                    \
+      BError _e = berr_from_errno((arena), (err_code), fmt, __FILE__,          \
+                                  __LINE__, __func__, ##__VA_ARGS__);          \
       berr_print(&_e);                                                         \
       goto label;                                                              \
     }                                                                          \
@@ -227,15 +237,15 @@ static const LT_Entry BErrorCodeStrTable[] = {
     // Sentinel
     {ERR_MAX_CODE, "Invalid error code (sentinel value)"}};
 
-BError berr_new(BErrorCode code, const char *fmt, const char *file, int line,
-                const char *func, ...);
-BError berr_from_errno(BErrorCode code, const char *fmt, const char *file,
-                       int line, const char *func, ...);
+BError berr_new(Arena *arena, BErrorCode code, const char *fmt,
+                const char *file, int line, const char *func, ...);
+BError berr_from_errno(Arena *arena, BErrorCode code, const char *fmt,
+                       const char *file, int line, const char *func, ...);
 
-void berr_set_arena(Arena *arena);
 const char *berr_code_to_str(BErrorCode code);
 const char *berr_msg(const BError *err);
 
 void berr_print(const BError *err);
+void log_error(const char *fmt, ...);
 
 #endif // ERROR_H

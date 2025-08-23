@@ -71,9 +71,9 @@ typedef struct {
 } ELFInfo;
 
 ELFInfo *init_elf(Arena *arena);
-int find_shdr(const Elf64_Shdr *shdrs, const uint64_t shnum,
+int find_shdr(Arena *arena, const Elf64_Shdr *shdrs, const uint64_t shnum,
               uint32_t target_type);
-int find_phdr(const Elf64_Phdr *phdrs, const uint64_t phnum,
+int find_phdr(Arena *arena, const Elf64_Phdr *phdrs, const uint64_t phnum,
               uint32_t target_type);
 
 #endif // ELF_UTILS_H

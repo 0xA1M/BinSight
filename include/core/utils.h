@@ -15,7 +15,6 @@ typedef struct {
 
 #define ARR_COUNT(x) (sizeof(x) / sizeof((x)[0]))
 #define CSTR_LEN(x) ((sizeof(x) / sizeof((x)[0])) - 1)
-
 #define MAX(x, y) ((x) > (y) ? (x) : (y))
 #define IS_POWER_2(x) (((x) != 0) && (((x) & ((x) - 1)) == 0))
 
@@ -56,11 +55,12 @@ typedef struct {
     (offset) += QWORD;                                                         \
   } while (0)
 
-BinaryFormat get_binary_format(const char *mime_str);
+BinaryFormat get_binary_format(Arena *arena, const char *mime_str);
 const char *lookup_binary_format(BinaryFormat fmt);
-void print_section_hex_dump(const char *section_name, const uint8_t *buffer,
-                            size_t size, const uintptr_t section_offset);
-void print_buffer_hex_dump(const uint8_t *buffer, size_t size,
+void print_section_hex_dump(Arena *arena, const char *section_name,
+                            const uint8_t *buffer, size_t size,
+                            const uintptr_t section_offset);
+void print_buffer_hex_dump(Arena *arena, const uint8_t *buffer, size_t size,
                            const uintptr_t start_address);
 
 static inline uint8_t read_byte(const uint8_t *buf, size_t offset) {
