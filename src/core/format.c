@@ -101,9 +101,8 @@ BinaryFile *load_binary(const char *path) {
     return NULL;
 
   binary->data = map_file(binary->arena, path, &binary->size);
-  ASSERT_GOTO(binary->arena, binary->data != NULL, cleanup,
-              ERR_FILE_MMAP_FAILED, "Failed to map file '%s' into memory",
-              path);
+  if (binary->data == NULL)
+    return NULL;
 
   binary->format = detect_format(binary->arena, binary->data, binary->size);
   ASSERT_GOTO(binary->arena, binary->format != FORMAT_UNKNOWN, cleanup,

@@ -14,56 +14,54 @@
 static BError parse_elf_hdr(Elf64_Ehdr *header, const uint8_t *buffer,
                             const BinaryEndianness endianness,
                             const BinaryBitness bitness) {
-  bool is_little_endian = endianness == ENDIANNESS_LITTLE ? true : false;
-
   // Copy the magic bytes (EI_NIDENT = 16)
   memcpy(header->e_ident, buffer, EI_NIDENT);
   size_t offset = EI_NIDENT;
 
-  READ_FIELD_WORD(header, e_type, buffer, offset, is_little_endian);
-  READ_FIELD_WORD(header, e_machine, buffer, offset, is_little_endian);
-  READ_FIELD_DWORD(header, e_version, buffer, offset, is_little_endian);
+  READ_FIELD_WORD(header, e_type, buffer, offset, endianness);
+  READ_FIELD_WORD(header, e_machine, buffer, offset, endianness);
+  READ_FIELD_DWORD(header, e_version, buffer, offset, endianness);
 
-  READ_FIELD_32_64(header, e_entry, buffer, offset, is_little_endian, bitness);
-  READ_FIELD_32_64(header, e_phoff, buffer, offset, is_little_endian, bitness);
-  READ_FIELD_32_64(header, e_shoff, buffer, offset, is_little_endian, bitness);
+  READ_FIELD_32_64(header, e_entry, buffer, offset, endianness, bitness);
+  READ_FIELD_32_64(header, e_phoff, buffer, offset, endianness, bitness);
+  READ_FIELD_32_64(header, e_shoff, buffer, offset, endianness, bitness);
 
-  READ_FIELD_DWORD(header, e_flags, buffer, offset, is_little_endian);
-  READ_FIELD_WORD(header, e_ehsize, buffer, offset, is_little_endian);
-  READ_FIELD_WORD(header, e_phentsize, buffer, offset, is_little_endian);
-  READ_FIELD_WORD(header, e_phnum, buffer, offset, is_little_endian);
-  READ_FIELD_WORD(header, e_shentsize, buffer, offset, is_little_endian);
-  READ_FIELD_WORD(header, e_shnum, buffer, offset, is_little_endian);
-  READ_FIELD_WORD(header, e_shstrndx, buffer, offset, is_little_endian);
+  READ_FIELD_DWORD(header, e_flags, buffer, offset, endianness);
+  READ_FIELD_WORD(header, e_ehsize, buffer, offset, endianness);
+  READ_FIELD_WORD(header, e_phentsize, buffer, offset, endianness);
+  READ_FIELD_WORD(header, e_phnum, buffer, offset, endianness);
+  READ_FIELD_WORD(header, e_shentsize, buffer, offset, endianness);
+  READ_FIELD_WORD(header, e_shnum, buffer, offset, endianness);
+  READ_FIELD_WORD(header, e_shstrndx, buffer, offset, endianness);
 
   return BERR_OK;
 }
 
 static BError parse_elf_phdr(Elf64_Phdr *p_header, const uint8_t *buffer,
-                             const bool is_little_endian,
+                             const BinaryEndianness endianness,
                              const BinaryBitness bitness) {
   size_t offset = 0;
-  READ_FIELD_DWORD(p_header, p_type, buffer, offset, is_little_endian);
+  READ_FIELD_DWORD(p_header, p_type, buffer, offset, endianness);
 
   // We cannot use READ_FIELD_32_64 because the order of the headers differ
   // between 32bits and 64bits ELFs
   if (bitness == BITNESS_32) {
-    READ_FIELD_DWORD(p_header, p_offset, buffer, offset, is_little_endian);
-    READ_FIELD_DWORD(p_header, p_vaddr, buffer, offset, is_little_endian);
-    READ_FIELD_DWORD(p_header, p_paddr, buffer, offset, is_little_endian);
-    READ_FIELD_DWORD(p_header, p_filesz, buffer, offset, is_little_endian);
-    READ_FIELD_DWORD(p_header, p_memsz, buffer, offset, is_little_endian);
-    READ_FIELD_DWORD(p_header, p_flags, buffer, offset, is_little_endian);
-    READ_FIELD_DWORD(p_header, p_align, buffer, offset, is_little_endian);
+    READ_FIELD_DWORD(p_header, p_offset, buffer, offset, endianness);
+    READ_FIELD_DWORD(p_header, p_vaddr, buffer, offset, endianness);
+    READ_FIELD_DWORD(p_header, p_paddr, buffer, offset, endianness);
+    READ_FIELD_DWORD(p_header, p_filesz, buffer, offset, endianness);
+    READ_FIELD_DWORD(p_header, p_memsz, buffer, offset, endianness);
+    READ_FIELD_DWORD(p_header, p_flags, buffer, offset, endianness);
+    READ_FIELD_DWORD(p_header, p_align, buffer, offset, endianness);
   } else if (bitness == BITNESS_64) {
-    READ_FIELD_DWORD(p_header, p_flags, buffer, offset, is_little_endian);
+    READ_FIELD_DWORD(p_header, p_flags, buffer, offset, endianness);
 
-    READ_FIELD_QWORD(p_header, p_offset, buffer, offset, is_little_endian);
-    READ_FIELD_QWORD(p_header, p_vaddr, buffer, offset, is_little_endian);
-    READ_FIELD_QWORD(p_header, p_paddr, buffer, offset, is_little_endian);
-    READ_FIELD_QWORD(p_header, p_filesz, buffer, offset, is_little_endian);
-    READ_FIELD_QWORD(p_header, p_memsz, buffer, offset, is_little_endian);
-    READ_FIELD_QWORD(p_header, p_align, buffer, offset, is_little_endian);
+    READ_FIELD_QWORD(p_header, p_offset, buffer, offset, endianness);
+    READ_FIELD_QWORD(p_header, p_vaddr, buffer, offset, endianness);
+    READ_FIELD_QWORD(p_header, p_paddr, buffer, offset, endianness);
+    READ_FIELD_QWORD(p_header, p_filesz, buffer, offset, endianness);
+    READ_FIELD_QWORD(p_header, p_memsz, buffer, offset, endianness);
+    READ_FIELD_QWORD(p_header, p_align, buffer, offset, endianness);
   }
 
   return BERR_OK;
@@ -74,8 +72,6 @@ static BError parse_elf_phdrs(Arena *arena, Elf64_Phdr *phdrs, uint64_t phnum,
                               uint8_t *data, size_t size,
                               const BinaryEndianness endianness,
                               const BinaryBitness bitness) {
-  bool is_little_endian = endianness == ENDIANNESS_LITTLE ? true : false;
-
   for (size_t i = 0; i < phnum; i++) {
     size_t offset = phoff + i * phentsize;
     CHECK(arena, offset + phentsize <= size, ERR_FORMAT_BAD_OFFSET_SIZE,
@@ -83,36 +79,29 @@ static BError parse_elf_phdrs(Arena *arena, Elf64_Phdr *phdrs, uint64_t phnum,
           "buf_size: %zu)",
           i, offset, phentsize, size);
 
-    RET_IF_ERR(
-        parse_elf_phdr(&phdrs[i], data + offset, is_little_endian, bitness));
+    RET_IF_ERR(parse_elf_phdr(&phdrs[i], data + offset, endianness, bitness));
   }
 
   return BERR_OK;
 }
 
 static BError parse_elf_shdr(Elf64_Shdr *s_header, const uint8_t *buffer,
-                             const bool is_little_endian,
+                             const BinaryEndianness endianness,
                              const BinaryBitness bitness) {
   size_t offset = 0;
-  READ_FIELD_DWORD(s_header, sh_name, buffer, offset, is_little_endian);
-  READ_FIELD_DWORD(s_header, sh_type, buffer, offset, is_little_endian);
+  READ_FIELD_DWORD(s_header, sh_name, buffer, offset, endianness);
+  READ_FIELD_DWORD(s_header, sh_type, buffer, offset, endianness);
 
-  READ_FIELD_32_64(s_header, sh_flags, buffer, offset, is_little_endian,
-                   bitness);
-  READ_FIELD_32_64(s_header, sh_addr, buffer, offset, is_little_endian,
-                   bitness);
-  READ_FIELD_32_64(s_header, sh_offset, buffer, offset, is_little_endian,
-                   bitness);
-  READ_FIELD_32_64(s_header, sh_size, buffer, offset, is_little_endian,
-                   bitness);
+  READ_FIELD_32_64(s_header, sh_flags, buffer, offset, endianness, bitness);
+  READ_FIELD_32_64(s_header, sh_addr, buffer, offset, endianness, bitness);
+  READ_FIELD_32_64(s_header, sh_offset, buffer, offset, endianness, bitness);
+  READ_FIELD_32_64(s_header, sh_size, buffer, offset, endianness, bitness);
 
-  READ_FIELD_DWORD(s_header, sh_link, buffer, offset, is_little_endian);
-  READ_FIELD_DWORD(s_header, sh_info, buffer, offset, is_little_endian);
+  READ_FIELD_DWORD(s_header, sh_link, buffer, offset, endianness);
+  READ_FIELD_DWORD(s_header, sh_info, buffer, offset, endianness);
 
-  READ_FIELD_32_64(s_header, sh_addralign, buffer, offset, is_little_endian,
-                   bitness);
-  READ_FIELD_32_64(s_header, sh_entsize, buffer, offset, is_little_endian,
-                   bitness);
+  READ_FIELD_32_64(s_header, sh_addralign, buffer, offset, endianness, bitness);
+  READ_FIELD_32_64(s_header, sh_entsize, buffer, offset, endianness, bitness);
 
   return BERR_OK;
 }
@@ -122,8 +111,6 @@ static BError parse_elf_shdrs(Arena *arena, Elf64_Shdr *shdrs, uint64_t shnum,
                               uint8_t *data, size_t size,
                               const BinaryEndianness endianness,
                               const BinaryBitness bitness) {
-  bool is_little_endian = endianness == ENDIANNESS_LITTLE ? true : false;
-
   for (size_t i = 0; i < shnum; i++) {
     size_t offset = shoff + i * shentsize;
     CHECK(arena, offset + shentsize <= size, ERR_FORMAT_BAD_OFFSET_SIZE,
@@ -131,8 +118,7 @@ static BError parse_elf_shdrs(Arena *arena, Elf64_Shdr *shdrs, uint64_t shnum,
           "buf_size: %zu)",
           i, offset, shentsize, size);
 
-    RET_IF_ERR(
-        parse_elf_shdr(&shdrs[i], data + offset, is_little_endian, bitness));
+    RET_IF_ERR(parse_elf_shdr(&shdrs[i], data + offset, endianness, bitness));
   }
 
   return BERR_OK;
@@ -156,23 +142,23 @@ static BError parse_elf_shstrtab(ELFInfo *elf, BinaryFile *bin) {
 }
 
 static BError parse_elf_sym(Elf64_Sym *sym_ent, const uint8_t *buffer,
-                            const bool is_little_endian,
+                            const BinaryEndianness endianness,
                             const BinaryBitness bitness) {
   size_t offset = 0;
-  READ_FIELD_DWORD(sym_ent, st_name, buffer, offset, is_little_endian);
+  READ_FIELD_DWORD(sym_ent, st_name, buffer, offset, endianness);
 
   if (bitness == BITNESS_32) {
-    READ_FIELD_DWORD(sym_ent, st_value, buffer, offset, is_little_endian);
-    READ_FIELD_DWORD(sym_ent, st_size, buffer, offset, is_little_endian);
+    READ_FIELD_DWORD(sym_ent, st_value, buffer, offset, endianness);
+    READ_FIELD_DWORD(sym_ent, st_size, buffer, offset, endianness);
     READ_FIELD_BYTE(sym_ent, st_info, buffer, offset);
     READ_FIELD_BYTE(sym_ent, st_other, buffer, offset);
-    READ_FIELD_WORD(sym_ent, st_shndx, buffer, offset, is_little_endian);
+    READ_FIELD_WORD(sym_ent, st_shndx, buffer, offset, endianness);
   } else if (bitness == BITNESS_64) {
     READ_FIELD_BYTE(sym_ent, st_info, buffer, offset);
     READ_FIELD_BYTE(sym_ent, st_other, buffer, offset);
-    READ_FIELD_WORD(sym_ent, st_shndx, buffer, offset, is_little_endian);
-    READ_FIELD_QWORD(sym_ent, st_value, buffer, offset, is_little_endian);
-    READ_FIELD_QWORD(sym_ent, st_size, buffer, offset, is_little_endian);
+    READ_FIELD_WORD(sym_ent, st_shndx, buffer, offset, endianness);
+    READ_FIELD_QWORD(sym_ent, st_value, buffer, offset, endianness);
+    READ_FIELD_QWORD(sym_ent, st_size, buffer, offset, endianness);
   }
 
   return BERR_OK;
@@ -183,8 +169,6 @@ static BError parse_elf_syms(Arena *arena, Elf64_Sym *symtab,
                              uint64_t off, uint8_t *data, size_t size,
                              const BinaryEndianness endianness,
                              const BinaryBitness bitness) {
-  bool is_little_endian = endianness == ENDIANNESS_LITTLE ? true : false;
-
   for (size_t i = 0; i < sym_count; i++) {
     size_t offset = off + i * entsize;
     CHECK(arena, offset + entsize <= size, ERR_FORMAT_BAD_OFFSET_SIZE,
@@ -192,8 +176,7 @@ static BError parse_elf_syms(Arena *arena, Elf64_Sym *symtab,
           "buf_size: %zu)",
           i, offset, entsize, size);
 
-    RET_IF_ERR(
-        parse_elf_sym(&symtab[i], data + offset, is_little_endian, bitness));
+    RET_IF_ERR(parse_elf_sym(&symtab[i], data + offset, endianness, bitness));
   }
 
   return BERR_OK;
@@ -332,28 +315,26 @@ static BError parse_elf_dynamic_syms(ELFInfo *elf, BinaryFile *bin) {
 }
 
 static BError parse_elf_dynamic_entry(Elf64_Dyn *dyn_ent, const uint8_t *buffer,
-                                      const bool is_little_endian,
+                                      const BinaryEndianness endianness,
                                       const BinaryBitness bitness) {
   size_t offset = 0;
 
   if (bitness == BITNESS_32) {
-    READ_FIELD_DWORD(dyn_ent, d_tag, buffer, offset, is_little_endian);
+    READ_FIELD_DWORD(dyn_ent, d_tag, buffer, offset, endianness);
 
     // The d_un entry of Elf64_Dyn is a union
-    READ_FIELD_DWORD(dyn_ent, d_un.d_val, buffer, offset, is_little_endian);
+    READ_FIELD_DWORD(dyn_ent, d_un.d_val, buffer, offset, endianness);
   } else if (bitness == BITNESS_64) {
-    READ_FIELD_QWORD(dyn_ent, d_tag, buffer, offset, is_little_endian);
+    READ_FIELD_QWORD(dyn_ent, d_tag, buffer, offset, endianness);
 
     // The d_un entry of Elf64_Dyn is a union
-    READ_FIELD_QWORD(dyn_ent, d_un.d_val, buffer, offset, is_little_endian);
+    READ_FIELD_QWORD(dyn_ent, d_un.d_val, buffer, offset, endianness);
   }
 
   return BERR_OK;
 }
 
 static BError parse_elf_dynamic_table(ELFInfo *elf, BinaryFile *bin) {
-  bool is_little_endian = bin->endianness == ENDIANNESS_LITTLE ? true : false;
-
   for (size_t i = 0; i < elf->dynamic_count; i++) {
     size_t offset = elf->dynamic_off + i * elf->dynamic_entsz;
     CHECK(bin->arena, offset + elf->dynamic_entsz <= bin->size,
@@ -363,7 +344,7 @@ static BError parse_elf_dynamic_table(ELFInfo *elf, BinaryFile *bin) {
           i, offset, elf->dynamic_entsz, bin->size);
 
     RET_IF_ERR(parse_elf_dynamic_entry(&elf->dynamic[i], bin->data + offset,
-                                       is_little_endian, bin->bitness));
+                                       bin->endianness, bin->bitness));
   }
 
   return BERR_OK;

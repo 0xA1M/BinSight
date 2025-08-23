@@ -20,13 +20,13 @@ typedef struct {
 
 #define NOT_IMPLEMENTED() printf("Not Implemented!\n");
 
-#define READ_FIELD_32_64(header, field, buffer, offset, is_le, bitness)        \
+#define READ_FIELD_32_64(header, field, buffer, offset, endianness, bitness)   \
   do {                                                                         \
     if ((bitness) == BITNESS_32) {                                             \
-      (header)->field = read_dword(buffer, offset, is_le);                     \
+      (header)->field = read_dword(buffer, offset, endianness);                \
       (offset) += DWORD;                                                       \
     } else {                                                                   \
-      (header)->field = read_qword(buffer, offset, is_le);                     \
+      (header)->field = read_qword(buffer, offset, endianness);                \
       (offset) += QWORD;                                                       \
     }                                                                          \
   } while (0)
@@ -37,21 +37,21 @@ typedef struct {
     (offset) += BYTE;                                                          \
   } while (0)
 
-#define READ_FIELD_WORD(header, field, buffer, offset, is_le)                  \
+#define READ_FIELD_WORD(header, field, buffer, offset, endianness)             \
   do {                                                                         \
-    (header)->field = read_word(buffer, offset, is_le);                        \
+    (header)->field = read_word(buffer, offset, endianness);                   \
     (offset) += WORD;                                                          \
   } while (0)
 
-#define READ_FIELD_DWORD(header, field, buffer, offset, is_le)                 \
+#define READ_FIELD_DWORD(header, field, buffer, offset, endianness)            \
   do {                                                                         \
-    (header)->field = read_dword(buffer, offset, is_le);                       \
+    (header)->field = read_dword(buffer, offset, endianness);                  \
     (offset) += DWORD;                                                         \
   } while (0)
 
-#define READ_FIELD_QWORD(header, field, buffer, offset, is_le)                 \
+#define READ_FIELD_QWORD(header, field, buffer, offset, endianness)            \
   do {                                                                         \
-    (header)->field = read_qword(buffer, offset, is_le);                       \
+    (header)->field = read_qword(buffer, offset, endianness);                  \
     (offset) += QWORD;                                                         \
   } while (0)
 
@@ -68,30 +68,30 @@ static inline uint8_t read_byte(const uint8_t *buf, size_t offset) {
 }
 
 static inline uint16_t read_word(const uint8_t *buf, size_t offset,
-                                 bool is_little_endian) {
+                                 BinaryEndianness endianness) {
   const uint8_t *p = buf + offset;
 
-  if (is_little_endian)
+  if (endianness == ENDIANNESS_LITTLE)
     return p[0] | (p[1] << 8);
 
   return (p[0] << 8) | p[1];
 }
 
 static inline uint32_t read_dword(const uint8_t *buf, size_t offset,
-                                  bool is_little_endian) {
+                                  BinaryEndianness endiannes) {
   const uint8_t *p = buf + offset;
 
-  if (is_little_endian)
+  if (endiannes == ENDIANNESS_LITTLE)
     return p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24);
 
   return (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
 }
 
 static inline uint64_t read_qword(const uint8_t *buf, size_t offset,
-                                  bool is_little_endian) {
+                                  BinaryEndianness endianness) {
   const uint8_t *p = buf + offset;
 
-  if (is_little_endian)
+  if (endianness == ENDIANNESS_LITTLE)
     return ((uint64_t)p[0]) | ((uint64_t)p[1] << 8) | ((uint64_t)p[2] << 16) |
            ((uint64_t)p[3] << 24) | ((uint64_t)p[4] << 32) |
            ((uint64_t)p[5] << 40) | ((uint64_t)p[6] << 48) |

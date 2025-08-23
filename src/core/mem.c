@@ -100,8 +100,11 @@ void *arena_alloc_align(Arena *arena, size_t size, size_t alignment) {
   uintptr_t new_aligned = align_forward(new_ptr, alignment);
   size_t new_offset = new_aligned - new_ptr;
 
-  assert(new_offset + size <=
-         new_chunk->cap); // Should always be true true to min_cap
+  ASSERT_RET_VAL(
+      arena, new_offset + size <= new_chunk->cap, NULL, ERR_MEM_OUT_OF_BOUNDS,
+      "Arena allocation out of bounds: requested size=%zu (offset=%zu) "
+      "exceeds chunk capacity=%zu (cap=%zu, alignment=%zu)",
+      size, new_offset, new_offset + size, new_chunk->cap, alignment);
 
   new_chunk->used = new_offset + size;
   arena->current->next = new_chunk;
