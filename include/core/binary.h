@@ -1,0 +1,57 @@
+#ifndef BINARY_H
+#define BINARY_H
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include "mem.h"
+
+typedef struct ELFInfo ELFInfo;
+typedef struct FormatHandler FormatHandler;
+
+typedef enum BinaryBitness {
+  BITNESS_UNKNOWN,
+  BITNESS_32,
+  BITNESS_64
+} BinaryBitness;
+
+typedef enum BinaryEndianness {
+  ENDIANNESS_UNKNOWN,
+  ENDIANNESS_LITTLE,
+  ENDIANNESS_BIG,
+} BinaryEndianness;
+
+typedef enum BinaryFormat {
+  FORMAT_ELF,
+  FORMAT_PE,
+  FORMAT_MACHO,
+  FORMAT_UNKNOWN
+} BinaryFormat;
+
+typedef struct Binary {
+  String path;
+  BinaryFormat format;
+  BinaryBitness bitness;
+  BinaryEndianness endianness;
+
+  // Raw binary data
+  uint8_t *data;
+  size_t size;
+
+  // Format-specific parsed data.
+  union {
+    ELFInfo *elf;
+  } parsed;
+
+  // Arena for format-specific allocations
+  Arena *arena;
+
+  // Format Handler
+  const FormatHandler *handler;
+} Binary;
+
+Binary *init_binary();
+void free_binary(Binary *bin);
+
+#endif // BINARY_H

@@ -1,0 +1,19 @@
+CompileFlags:
+  Add: [
+    "-I./src",
+    "-I./include",
+    "-Wall",
+    "-Wextra",
+    "-Wpedantic"
+  ]
+
+Diagnostics:
+  ClangTidy:
+    Add: [
+      "clang-analyzer-*",
+      "bugprone-*",
+    ]
+    Remove: [
+      "bugprone-easily-swappable-parameters"
+    ]
+  UnusedIncludes: Strict
