@@ -3,7 +3,6 @@
 extern "C" {
 #include "core/error.h"
 #include "core/mem.h"
-#include <errno.h>
 }
 
 class ErrorTest : public ::testing::Test {

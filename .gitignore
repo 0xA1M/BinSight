@@ -53,10 +53,7 @@ dkms.conf
 
 # Build
 build/
-<<<<<<< HEAD
 build/tests/
-=======
->>>>>>> 952559b828f0673552e825516f48d0f1c2aa0e55
 
 # CMake-generated files
 CMakeFiles/

@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 .PHONY: all build rebuild run run32 test check clean distclean release
 
 all: build
@@ -38,21 +37,3 @@ distclean:
 release:
 	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 	cmake --build build --config Release
-=======
-.PHONY: all build run clean
-
-all: build
-
-build:
-	cmake -S . -B build
-	cmake --build build
-
-run: build
-	@./build/binsight ./build/binsight
-
-run32: build
-	@./build/binsight ~/Playground/32/main
-
-clean:
-	rm -rf build
->>>>>>> 952559b828f0673552e825516f48d0f1c2aa0e55
