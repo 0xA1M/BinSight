@@ -320,7 +320,7 @@ void print_elf_dynamic(Arena *arena, const ELFInfo *elf) {
   }
 }
 
-/* Print whole ELF (readelf style) */
+/* Print whole ELF (readelf-style) */
 void print_elf(Arena *arena, ELFInfo *elf) {
   ASSERT_RET(arena, elf != NULL, ERR_ARG_NULL,
              "Cannot print ELF: ELFInfo struct is NULL");

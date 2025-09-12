@@ -4,8 +4,6 @@
 #include <string.h>
 
 #include "core/error.h"
-#include "core/mem.h"
-#include "core/utils.h"
 
 static String dup_fmt(Arena *arena, const char *fmt, va_list ap) {
   if (arena == NULL)
@@ -25,6 +23,7 @@ static String dup_fmt(Arena *arena, const char *fmt, va_list ap) {
     return EMPTY_STR;
 
   vsnprintf((char *)buf.str, needed + 1, fmt, ap);
+
   return buf;
 }
 

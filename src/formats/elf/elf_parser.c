@@ -249,7 +249,7 @@ static BError parse_tables(Reader *reader, ELFInfo *elf) {
   return BERR_OK;
 }
 
-// Parse mascellanous data
+// Parse miscellaneous data
 static BError parse_elf_interp(Reader *reader, ELFInfo *elf) {
   const Elf64_Phdr *interp = elf_get_segment_by_type(&elf->phdrs, PT_INTERP);
   if (interp == NULL) {

@@ -5,7 +5,6 @@
 
 #include "core/error.h"
 #include "core/mem.h"
-#include "core/utils.h"
 
 static uintptr_t align_forward(uintptr_t ptr, size_t alignment) {
   assert(IS_POWER_2(alignment));
