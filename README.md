@@ -26,7 +26,7 @@
 make
 ````
 
-### ▶️ Run
+### Run
 
 ```bash
 ./binsight /path/to/binary
