@@ -8,6 +8,8 @@
 
 #include "core/format.h"
 
+#include "core/binary.h"
+#include "core/error.h"
 #include "formats/elf/elf_loader.h"
 #include "formats/elf/elf_print.h"
 
@@ -60,35 +62,39 @@ cleanup:
 
 // TODO: Allow user to specify path to the magic db or use the default one on
 // the system <- robustly locate it (somehow)
-static BinaryFormat detect_format(Arena *arena, const uint8_t *data,
-                                  size_t size) {
-  BinaryFormat fmt = FORMAT_UNKNOWN;
+static BError detect_format(Arena *arena, const uint8_t *data, size_t size,
+                            BinaryFormat *out_fmt) {
+  BError err = BERR_OK;
+  *out_fmt = FORMAT_UNKNOWN;
 
   magic_t cookie = magic_open(MAGIC_MIME_TYPE | MAGIC_ERROR);
-  ASSERT_RET_VAL(arena, cookie != NULL, FORMAT_UNKNOWN,
-                 ERR_FORMAT_MAGIC_INIT_FAILED, "Failed to initialize libmagic");
+  CHECK_GOTO(arena, cookie != NULL, cleanup, err, ERR_FORMAT_MAGIC_INIT_FAILED,
+             "Failed to initialize libmagic");
 
-  ASSERT_GOTO(arena, magic_load(cookie, NULL) == 0, cleanup,
-              ERR_FORMAT_MAGIC_LOAD_FAILED,
-              "Failed to load libmagic database: %s", magic_errno(cookie));
+  CHECK_GOTO(arena, magic_load(cookie, NULL) == 0, cleanup, err,
+             ERR_FORMAT_MAGIC_LOAD_FAILED,
+             "Failed to load libmagic database: %s", magic_errno(cookie));
 
   // Cap sample size; libmagic typically needs only a small prefix.
   const size_t SAMPLE_MAX = 4096;
   const size_t sample_size = size < SAMPLE_MAX ? size : SAMPLE_MAX;
 
   const char *result_str = magic_buffer(cookie, data, sample_size);
-  ASSERT_GOTO(arena, result_str != NULL, cleanup,
-              ERR_FORMAT_MAGIC_DETECT_FAILED,
-              "Failed to detect file format: %s", magic_error(cookie));
+  CHECK_GOTO(arena, result_str != NULL, cleanup, err,
+             ERR_FORMAT_MAGIC_DETECT_FAILED, "Failed to detect file format: %s",
+             magic_error(cookie));
 
   String result = {.str = result_str, .len = strlen(result_str)};
-  fmt = get_binary_format(arena, result);
-  if (fmt == FORMAT_UNKNOWN)
-    fprintf(stderr, "Unsupported file type: " STR, (int)result.len, result.str);
+  *out_fmt = get_binary_format(arena, result);
+  CHECK_GOTO(arena, *out_fmt != FORMAT_UNKNOWN, cleanup, err,
+             ERR_FORMAT_UNKNOWN, "File format '" STR "' is unknown",
+             (int)result.len, result.str);
 
 cleanup:
-  magic_close(cookie);
-  return fmt;
+  if (cookie != NULL)
+    magic_close(cookie);
+
+  return err;
 }
 
 static const FormatHandler *find_handler(BinaryFormat fmt) {
@@ -99,8 +105,9 @@ static const FormatHandler *find_handler(BinaryFormat fmt) {
   return NULL;
 }
 
-Binary *load_binary(String path) {
+Binary *load_binary(const String path) {
   Binary *binary = NULL;
+  BError err = BERR_OK;
 
   binary = init_binary();
   if (binary == NULL)
@@ -108,12 +115,11 @@ Binary *load_binary(String path) {
 
   binary->data = map_file(binary->arena, path.str, &binary->size);
   if (binary->data == NULL)
-    return NULL;
+    goto cleanup;
 
-  binary->format = detect_format(binary->arena, binary->data, binary->size);
-  ASSERT_GOTO(binary->arena, binary->format != FORMAT_UNKNOWN, cleanup,
-              ERR_FORMAT_UNKNOWN, "Could not detect binary format for " STR,
-              (int)path.len, path.str);
+  err =
+      detect_format(binary->arena, binary->data, binary->size, &binary->format);
+  GOTO_IF_ERR(err, cleanup);
 
   binary->handler = find_handler(binary->format);
   ASSERT_GOTO(binary->arena, binary->handler != NULL, cleanup,
@@ -125,11 +131,8 @@ Binary *load_binary(String path) {
   ASSERT_GOTO(binary->arena, binary->path.str != NULL, cleanup,
               ERR_MEM_ALLOC_FAILED, "Failed to duplicate binary path string");
 
-  BError err = binary->handler->load(binary);
-  ASSERT_GOTO(binary->arena, IS_OK(err), cleanup, ERR_FORMAT_PARSE_FAILED,
-              "Failed to parse binary for format %s",
-              lookup_binary_format(binary->format).str);
-
+  err = binary->handler->load(binary);
+  GOTO_IF_ERR(err, cleanup);
   return binary;
 
 cleanup:

@@ -55,7 +55,7 @@ typedef struct {
 ## Directory Structure
 
 ```text
-bin-analyzer/
+BinSight/
 ├── src/
 │   ├── core/                        # Core engine (Arena Allocator, Error handler, Dispatcher...etc)
 │   ├── formats/                     # Format loaders (ELF, PE, etc.)

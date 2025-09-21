@@ -18,9 +18,9 @@ typedef struct FormatHandler {
   BError (*load)(Binary *bin);
 
   // Print function
-  void (*print)(Arena *arena, ELFInfo *parsed_data);
+  void (*print)(Arena *arena, const ELFInfo *parsed_data);
 } FormatHandler;
 
-Binary *load_binary(String path);
+Binary *load_binary(const String path);
 
 #endif // FORMAT_H

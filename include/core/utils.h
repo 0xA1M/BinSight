@@ -43,10 +43,10 @@ static inline uint16_t read_word(const uint8_t *buf, size_t offset,
 }
 
 static inline uint32_t read_dword(const uint8_t *buf, size_t offset,
-                                  BinaryEndianness endiannes) {
+                                  BinaryEndianness endianness) {
   const uint8_t *p = buf + offset;
 
-  if (endiannes == ENDIANNESS_LITTLE)
+  if (endianness == ENDIANNESS_LITTLE)
     return p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24);
 
   return (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];

@@ -93,6 +93,16 @@ typedef struct BError {
     }                                                                          \
   } while (0)
 
+// GOTO_IF_ERR: For functions that can't return BError directly.
+// Prints and jumps to a label if an error occurred.
+#define GOTO_IF_ERR(err, label)                                                \
+  do {                                                                         \
+    if (IS_ERR(err)) {                                                         \
+      berr_print(&(err));                                                      \
+      goto label;                                                              \
+    }                                                                          \
+  } while (0)
+
 // CHECK: For functions returning BError. Creates and returns a new error if
 // condition is false.
 #define CHECK(arena, cond, err_code, fmt, ...)                                 \
@@ -103,12 +113,32 @@ typedef struct BError {
     }                                                                          \
   } while (0)
 
+// CHECK_GOTO: Creates a new error and jumps to a label if condition is false.
+#define CHECK_GOTO(arena, cond, label, out_err, err_code, fmt, ...)            \
+  do {                                                                         \
+    if (!(cond)) {                                                             \
+      (out_err) = berr_new((arena), (err_code), fmt, __FILE__, __LINE__,       \
+                           __func__, ##__VA_ARGS__);                           \
+      goto label;                                                              \
+    }                                                                          \
+  } while (0)
+
 // CHECK_ERRNO: Similar to CHECK, but includes errno description.
 #define CHECK_ERRNO(arena, cond, err_code, fmt, ...)                           \
   do {                                                                         \
     if (!(cond)) {                                                             \
       return berr_from_errno((arena), (err_code), fmt, __FILE__, __LINE__,     \
                              __func__, ##__VA_ARGS__);                         \
+    }                                                                          \
+  } while (0)
+
+// CHECK_GOTO_ERRNO: Similar to CHECK_GOTO, but includes errno description.
+#define CHECK_GOTO_ERRNO(arena, cond, label, out_err, err_code, fmt, ...)      \
+  do {                                                                         \
+    if (!(cond)) {                                                             \
+      (out_err) = berr_from_errno((arena), (err_code), fmt, __FILE__,          \
+                                  __LINE__, __func__, ##__VA_ARGS__);          \
+      goto label;                                                              \
     }                                                                          \
   } while (0)
 
@@ -224,6 +254,7 @@ static const LT_Entry BErrorCodeStrTable[] = {
     {ERR_FORMAT_INVALID_FIELD, "Format error: Invalid or corrupt field"},
     {ERR_FORMAT_CORRUPT_DATA, "Format error: Corrupt or inconsistent data"},
     {ERR_FORMAT_NULL_PTR, "Format error: Unexpected NULL pointer encountered"},
+    {ERR_FORMAT_OUT_OF_BOUNDS, "Format error: Out of bound access"},
     {ERR_FORMAT_UNKNOWN_ERROR,
      "Format error: An unspecified format error occurred"},
 
@@ -251,6 +282,11 @@ String berr_code_to_str(BErrorCode code);
 String berr_msg(const BError *err);
 
 void berr_print(const BError *err);
-void log_error(const char *fmt, ...);
+void log_error(const char *file, int line, const char *func, const char *fmt,
+               ...);
+
+// Helper macro
+#define LOG_ERR(fmt, ...)                                                      \
+  log_error(__FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 
 #endif // ERROR_H

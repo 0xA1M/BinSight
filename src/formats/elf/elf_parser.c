@@ -1,8 +1,11 @@
 #include <elf.h>
 #include <string.h>
 
+#include "core/binary.h"
+#include "core/error.h"
 #include "core/mem.h"
 #include "core/reader.h"
+#include "core/utils.h"
 #include "formats/elf/elf_parser.h"
 #include "formats/elf/elf_utils.h"
 
@@ -45,6 +48,22 @@ static BError parse_program_header(Reader *reader, Elf64_Phdr *p_header) {
 }
 
 static BError parse_program_headers(Reader *reader, ELFPhdrs *phdrs) {
+  uint64_t total_phdrs_size = 0;
+  CHECK(reader->arena,
+        !__builtin_mul_overflow(phdrs->count, phdrs->entry_size,
+                                &total_phdrs_size),
+        ERR_ARG_OUT_OF_RANGE,
+        "Integer overflow when calculating total program headers size");
+
+  CHECK(reader->arena, phdrs->offset <= reader->size, ERR_FORMAT_OUT_OF_BOUNDS,
+        "Program headers offset (0x%lx) is out of bounds (size: 0x%zx)",
+        phdrs->offset, reader->size);
+  CHECK(reader->arena, total_phdrs_size <= reader->size - phdrs->offset,
+        ERR_FORMAT_OUT_OF_BOUNDS,
+        "Program headers table (size 0x%lx at offset 0x%lx) is out of bounds "
+        "(file size: 0x%zx)",
+        total_phdrs_size, phdrs->offset, reader->size);
+
   for (size_t i = 0; i < phdrs->count; i++) {
     size_t offset = phdrs->offset + (i * phdrs->entry_size);
     RET_IF_ERR(reader_seek(reader, offset));
@@ -68,6 +87,22 @@ static BError parse_section_header(Reader *reader, Elf64_Shdr *s_header) {
 }
 
 static BError parse_section_headers(Reader *reader, ELFShdrs *shdrs) {
+  uint64_t total_shdrs_size = 0;
+  CHECK(reader->arena,
+        !__builtin_mul_overflow(shdrs->count, shdrs->entry_size,
+                                &total_shdrs_size),
+        ERR_ARG_OUT_OF_RANGE,
+        "Integer overflow when calculating total section headers size");
+
+  CHECK(reader->arena, shdrs->offset <= reader->size, ERR_FORMAT_OUT_OF_BOUNDS,
+        "Section headers offset (0x%lx) is out of bounds (size: 0x%zx)",
+        shdrs->offset, reader->size);
+  CHECK(reader->arena, total_shdrs_size <= reader->size - shdrs->offset,
+        ERR_FORMAT_OUT_OF_BOUNDS,
+        "Section headers table (size 0x%lx at offset 0x%lx) is out of bounds "
+        "(file size: 0x%zx)",
+        total_shdrs_size, shdrs->offset, reader->size);
+
   for (size_t i = 0; i < shdrs->count; i++) {
     size_t offset = shdrs->offset + i * shdrs->entry_size;
     RET_IF_ERR(reader_seek(reader, offset));
@@ -87,6 +122,14 @@ static BError parse_headers(Reader *reader, ELFInfo *elf) {
     elf->phdrs.count = elf->ehdr->e_phnum;
     elf->phdrs.offset = elf->ehdr->e_phoff;
     elf->phdrs.entry_size = elf->ehdr->e_phentsize;
+    size_t expected_phent_size = (reader->bitness == BITNESS_32)
+                                     ? sizeof(Elf32_Phdr)
+                                     : sizeof(Elf64_Phdr);
+    CHECK(reader->arena, elf->phdrs.entry_size == expected_phent_size,
+          ERR_FORMAT_INVALID_FIELD,
+          "Invalid program header size: got %lu, expected %zu",
+          elf->phdrs.entry_size, expected_phent_size);
+
     elf->phdrs.headers = (Elf64_Phdr *)arena_alloc_array(
         reader->arena, elf->phdrs.count, sizeof(Elf64_Phdr));
     CHECK(reader->arena, elf->phdrs.headers != NULL, ERR_MEM_ALLOC_FAILED,
@@ -99,6 +142,14 @@ static BError parse_headers(Reader *reader, ELFInfo *elf) {
     elf->shdrs.count = elf->ehdr->e_shnum;
     elf->shdrs.offset = elf->ehdr->e_shoff;
     elf->shdrs.entry_size = elf->ehdr->e_shentsize;
+    size_t expected_shent_size = (reader->bitness == BITNESS_32)
+                                     ? sizeof(Elf32_Shdr)
+                                     : sizeof(Elf64_Shdr);
+    CHECK(reader->arena, elf->shdrs.entry_size == expected_shent_size,
+          ERR_FORMAT_INVALID_FIELD,
+          "Invalid section header size: got %lu, expected %zu",
+          elf->shdrs.entry_size, expected_shent_size);
+
     elf->shdrs.headers = (Elf64_Shdr *)arena_alloc_array(
         reader->arena, elf->shdrs.count, sizeof(Elf64_Shdr));
     CHECK(reader->arena, elf->shdrs.headers != NULL, ERR_MEM_ALLOC_FAILED,
@@ -111,6 +162,11 @@ static BError parse_headers(Reader *reader, ELFInfo *elf) {
 
 // Parse ELF Sections & Tables
 static BError parse_strtab(Reader *reader, ELFInfo *elf) {
+  CHECK(reader->arena, elf->shdrs.strtab_ndx < elf->shdrs.count,
+        ERR_FORMAT_BAD_INDEX,
+        "Section header string table index (%u) is out of bounds (section "
+        "headers count: %u)",
+        elf->shdrs.strtab_ndx, elf->shdrs.count);
   CHECK(reader->arena,
         elf->shdrs.strtab_off + elf->shdrs.strtab.len <= reader->size,
         ERR_FORMAT_OUT_OF_BOUNDS,
@@ -118,8 +174,11 @@ static BError parse_strtab(Reader *reader, ELFInfo *elf) {
 
   const Elf64_Shdr *shstrtab_hdr = &elf->shdrs.headers[elf->shdrs.strtab_ndx];
   elf->shdrs.strtab_off = shstrtab_hdr->sh_offset;
-
   uint64_t len = shstrtab_hdr->sh_size;
+  CHECK(reader->arena, elf->shdrs.strtab_off + len <= reader->size,
+        ERR_FORMAT_OUT_OF_BOUNDS,
+        "Section header string table is out of bounds");
+
   const char *str = (const char *)(reader->data + elf->shdrs.strtab_off);
   elf->shdrs.strtab = string_new(reader->arena, str, len);
 
@@ -145,6 +204,22 @@ static BError parse_symbol(Reader *reader, Elf64_Sym *sym_ent) {
 }
 
 static BError parse_symbols(Reader *reader, ELFSymTab *symtab) {
+  uint64_t total_symbols_size = 0;
+  CHECK(reader->arena,
+        !__builtin_mul_overflow(symtab->count, symtab->entry_size,
+                                &total_symbols_size),
+        ERR_ARG_OUT_OF_RANGE,
+        "Integer overflow when calculating total symbols size");
+
+  CHECK(reader->arena, symtab->offset <= reader->size, ERR_FORMAT_OUT_OF_BOUNDS,
+        "Symbol table offset (0x%lx) is out of bounds (size: 0x%zx)",
+        symtab->offset, reader->size);
+  CHECK(reader->arena, total_symbols_size <= reader->size - symtab->offset,
+        ERR_FORMAT_OUT_OF_BOUNDS,
+        "Symbol table (size 0x%lx at offset 0x%lx) is out of bounds "
+        "(file size: 0x%zx)",
+        total_symbols_size, symtab->offset, reader->size);
+
   for (size_t i = 0; i < symtab->count; i++) {
     size_t offset = symtab->offset + i * symtab->entry_size;
     RET_IF_ERR(reader_seek(reader, offset));
@@ -171,6 +246,13 @@ static BError parse_symbols_table(Reader *reader, ELFInfo *elf,
                    ? symtab_hdr->sh_size / symtab_hdr->sh_entsize
                    : 0;
 
+  size_t expected_sym_size =
+      (reader->bitness == BITNESS_32) ? sizeof(Elf32_Sym) : sizeof(Elf64_Sym);
+  CHECK(reader->arena, out->entry_size == expected_sym_size,
+        ERR_FORMAT_INVALID_FIELD,
+        "Invalid symtab entry size: got %lu, expected %zu", out->entry_size,
+        expected_sym_size);
+
   if (out->count > 0) {
     Elf64_Shdr *strtab_hdr = &elf->shdrs.headers[symtab_hdr->sh_link];
     CHECK(reader->arena, strtab_hdr->sh_type == SHT_STRTAB,
@@ -181,6 +263,9 @@ static BError parse_symbols_table(Reader *reader, ELFInfo *elf,
           ERR_FORMAT_OUT_OF_BOUNDS, "Symbol string table is out of bounds");
 
     uint64_t len = strtab_hdr->sh_size;
+    CHECK(reader->arena, out->offset + len <= reader->size,
+          ERR_FORMAT_OUT_OF_BOUNDS, "Symbol string table is out of bounds");
+
     const char *str = (const char *)(reader->data + strtab_hdr->sh_offset);
     out->strtab = string_new(reader->arena, str, len);
 
@@ -202,6 +287,23 @@ static BError parse_dynamic_entry(Reader *reader, Elf64_Dyn *dyn_ent) {
 }
 
 static BError parse_dynamic_entries(Reader *reader, ELFInfo *elf) {
+  uint64_t total_dynamic_size = 0;
+  CHECK(reader->arena,
+        !__builtin_mul_overflow(elf->dynamic.count, elf->dynamic.entry_size,
+                                &total_dynamic_size),
+        ERR_ARG_OUT_OF_RANGE,
+        "Integer overflow when calculating total symbols size");
+
+  CHECK(reader->arena, elf->dynamic.offset <= reader->size,
+        ERR_FORMAT_OUT_OF_BOUNDS,
+        "Dynamic section offset (0x%lx) is out of bounds (size: 0x%zx)",
+        elf->dynamic.offset, reader->size);
+  CHECK(reader->arena, total_dynamic_size <= reader->size - elf->dynamic.offset,
+        ERR_FORMAT_OUT_OF_BOUNDS,
+        "Symbol table (size 0x%lx at offset 0x%lx) is out of bounds "
+        "(file size: 0x%zx)",
+        total_dynamic_size, elf->dynamic.offset, reader->size);
+
   for (size_t i = 0; i < elf->dynamic.count; i++) {
     size_t offset = elf->dynamic.offset + i * elf->dynamic.entry_size;
     RET_IF_ERR(reader_seek(reader, offset));
@@ -222,6 +324,13 @@ static BError parse_dynamic_table(Reader *reader, ELFInfo *elf) {
   elf->dynamic.count =
       dyn_hdr->sh_entsize > 0 ? dyn_hdr->sh_size / dyn_hdr->sh_entsize : 0;
 
+  size_t expected_dynamic_size =
+      (reader->bitness == BITNESS_32) ? sizeof(Elf32_Dyn) : sizeof(Elf64_Dyn);
+  CHECK(reader->arena, elf->dynamic.entry_size == expected_dynamic_size,
+        ERR_FORMAT_INVALID_FIELD,
+        "Invalid dynamic section entry size: got %lu, expected %zu",
+        elf->dynamic.entry_size, expected_dynamic_size);
+
   if (elf->dynamic.count > 0) {
     elf->dynamic.entries = (Elf64_Dyn *)arena_alloc_array(
         reader->arena, elf->dynamic.count, sizeof(Elf64_Dyn));
@@ -234,17 +343,165 @@ static BError parse_dynamic_table(Reader *reader, ELFInfo *elf) {
   return BERR_OK;
 }
 
+static BError parse_rel_entry(Reader *reader, Elf64_Rel *rel_ent) {
+  RET_IF_ERR(reader_read_addr(reader, &rel_ent->r_offset));
+  RET_IF_ERR(reader_read_addr(reader, &rel_ent->r_info));
+  return BERR_OK;
+}
+
+static BError parse_rela_entry(Reader *reader, Elf64_Rela *rela_ent) {
+  RET_IF_ERR(reader_read_addr(reader, &rela_ent->r_offset));
+  RET_IF_ERR(reader_read_addr(reader, &rela_ent->r_info));
+  RET_IF_ERR(reader_read_addr(reader, (uint64_t *)&rela_ent->r_addend));
+  return BERR_OK;
+}
+
+static BError parse_reloc_tab_entry(Reader *reader, ELFRelNode *rel_node,
+                                    const uint32_t sh_type) {
+  uint64_t total_reloc_size = 0;
+  CHECK(reader->arena,
+        !__builtin_mul_overflow(rel_node->rel_tab.count,
+                                rel_node->rel_tab.entry_size,
+                                &total_reloc_size),
+        ERR_ARG_OUT_OF_RANGE,
+        "Integer overflow when calculating total relocations size");
+
+  CHECK(reader->arena, rel_node->rel_tab.offset <= reader->size,
+        ERR_FORMAT_OUT_OF_BOUNDS,
+        "Relocation tables offset (0x%lx) is out of bounds (size: 0x%zx)",
+        rel_node->rel_tab.offset, reader->size);
+  CHECK(reader->arena,
+        total_reloc_size <= reader->size - rel_node->rel_tab.offset,
+        ERR_FORMAT_OUT_OF_BOUNDS,
+        "Relocation table (size 0x%lx at offset 0x%lx) is out of bounds (file "
+        "size: 0x%zx)",
+        total_reloc_size, rel_node->rel_tab.offset, reader->size);
+
+  if (sh_type == SHT_REL) {
+    rel_node->rel_tab.rel_entries = (Elf64_Rel *)arena_alloc_array(
+        reader->arena, rel_node->rel_tab.count, sizeof(Elf64_Rel));
+    CHECK(reader->arena, rel_node->rel_tab.rel_entries != NULL,
+          ERR_MEM_ALLOC_FAILED, "Failed to allocate memory for REL entries");
+
+    for (size_t i = 0; i < rel_node->rel_tab.count; i++) {
+      size_t offset =
+          rel_node->rel_tab.offset + rel_node->rel_tab.entry_size * i;
+      RET_IF_ERR(reader_seek(reader, offset));
+      RET_IF_ERR(parse_rel_entry(reader, &rel_node->rel_tab.rel_entries[i]));
+    }
+  } else { // SHT_RELA
+    rel_node->rel_tab.rela_entries = (Elf64_Rela *)arena_alloc_array(
+        reader->arena, rel_node->rel_tab.count, sizeof(Elf64_Rela));
+    CHECK(reader->arena, rel_node->rel_tab.rela_entries != NULL,
+          ERR_MEM_ALLOC_FAILED, "Failed to allocate memory for RELA entries");
+
+    for (size_t i = 0; i < rel_node->rel_tab.count; ++i) {
+      size_t offset =
+          rel_node->rel_tab.offset + i * rel_node->rel_tab.entry_size;
+      RET_IF_ERR(reader_seek(reader, offset));
+      RET_IF_ERR(parse_rela_entry(reader, &rel_node->rel_tab.rela_entries[i]));
+    }
+  }
+
+  return BERR_OK;
+}
+
+static BError parse_reloc_table(Reader *reader, ELFInfo *elf,
+                                const Elf64_Shdr *reloc_hdr, uint32_t sh_type) {
+  ELFRelNode *rel_node =
+      (ELFRelNode *)arena_alloc(reader->arena, sizeof(ELFRelNode));
+  CHECK(reader->arena, rel_node != NULL, ERR_MEM_ALLOC_FAILED,
+        "Failed to allocate memory for relocation node");
+
+  if (!IS_STR_EMPTY(elf->shdrs.strtab)) {
+    CHECK(reader->arena, reloc_hdr->sh_name < elf->shdrs.strtab.len,
+          ERR_FORMAT_OUT_OF_BOUNDS,
+          "Relocation section name offset is out of bounds");
+
+    const char *reloc_name =
+        (const char *)(elf->shdrs.strtab.str + reloc_hdr->sh_name);
+    rel_node->rel_tab.name =
+        string_new(reader->arena, reloc_name, strlen(reloc_name));
+  }
+
+  rel_node->rel_tab.sh_type = sh_type;
+  rel_node->rel_tab.offset = reloc_hdr->sh_offset;
+  rel_node->rel_tab.entry_size = reloc_hdr->sh_entsize;
+  rel_node->rel_tab.count = reloc_hdr->sh_entsize > 0
+                                ? reloc_hdr->sh_size / reloc_hdr->sh_entsize
+                                : 0;
+
+  size_t expected_reloc_size =
+      (sh_type == SHT_REL)
+          ? ((reader->bitness == BITNESS_32) ? sizeof(Elf32_Rel)
+                                             : sizeof(Elf64_Rel))
+          : ((reader->bitness == BITNESS_32) ? sizeof(Elf32_Rela)
+                                             : sizeof(Elf64_Rela));
+
+  if (reloc_hdr->sh_entsize > 0)
+    CHECK(reader->arena, rel_node->rel_tab.entry_size == expected_reloc_size,
+          ERR_FORMAT_INVALID_FIELD,
+          "Invalid relocation entry size: got %lu, expected %zu",
+          rel_node->rel_tab.entry_size, expected_reloc_size);
+
+  CHECK(reader->arena, reloc_hdr->sh_link < elf->shdrs.count,
+        ERR_FORMAT_BAD_INDEX,
+        "Relocation section '" STR "' has an out-of-bounds sh_link (%u)",
+        (int)rel_node->rel_tab.name.len, rel_node->rel_tab.name.str,
+        reloc_hdr->sh_link);
+
+  const Elf64_Shdr *linked_shdr = &elf->shdrs.headers[reloc_hdr->sh_link];
+  switch (linked_shdr->sh_type) {
+  case SHT_SYMTAB:
+    rel_node->rel_tab.symtab = &elf->symtab;
+    break;
+  case SHT_DYNSYM:
+    rel_node->rel_tab.symtab = &elf->dynsym;
+    break;
+  default: // TODO: Better handling
+    rel_node->rel_tab.symtab = NULL;
+
+    LOG_ERR("Relocation section '%.*s' links to a non-symbol table "
+            "(type: %u)",
+            (int)rel_node->rel_tab.name.len, rel_node->rel_tab.name.str,
+            linked_shdr->sh_type);
+    break;
+  }
+
+  if (rel_node->rel_tab.count > 0)
+    RET_IF_ERR(parse_reloc_tab_entry(reader, rel_node, sh_type));
+
+  // Add to linked list
+  rel_node->next = elf->rel_head;
+  elf->rel_head = rel_node;
+
+  return BERR_OK;
+}
+
+struct BError parse_reloc_tables(Reader *reader, ELFInfo *elf) {
+  for (uint16_t i = 0; i < elf->shdrs.count; i++) {
+    const Elf64_Shdr *shdr = &elf->shdrs.headers[i];
+    if (shdr->sh_type == SHT_REL || shdr->sh_type == SHT_RELA)
+      RET_IF_ERR(parse_reloc_table(reader, elf, shdr, shdr->sh_type));
+  }
+
+  return BERR_OK;
+}
+
 static BError parse_tables(Reader *reader, ELFInfo *elf) {
   /* Parse Section Header String Table */
   elf->shdrs.strtab_ndx = elf->ehdr->e_shstrndx;
   RET_IF_ERR(parse_strtab(reader, elf));
 
-  /* Parse Symbol Tables using the DRY helper */
+  /* Parse Symbol Tables */
   RET_IF_ERR(parse_symbols_table(reader, elf, SHT_SYMTAB, &elf->symtab));
   RET_IF_ERR(parse_symbols_table(reader, elf, SHT_DYNSYM, &elf->dynsym));
 
   /* Parse Dynamic Section */
   RET_IF_ERR(parse_dynamic_table(reader, elf));
+
+  /* Parse Relocation Tables */
+  RET_IF_ERR(parse_reloc_tables(reader, elf));
 
   return BERR_OK;
 }
@@ -262,6 +519,10 @@ static BError parse_elf_interp(Reader *reader, ELFInfo *elf) {
         "Interpreter segment is out of binary bounds.");
 
   uint64_t len = interp->p_memsz;
+  CHECK(reader->arena, interp->p_offset + len <= reader->size,
+        ERR_FORMAT_OUT_OF_BOUNDS,
+        "Section header string table is out of bounds");
+
   const char *str = (const char *)(reader->data + interp->p_offset);
   elf->interp = string_new(reader->arena, str, len);
 

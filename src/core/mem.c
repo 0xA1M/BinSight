@@ -21,8 +21,7 @@ static Chunk *allocate_new_chunk(size_t cap) {
   if (chunk == NULL) {
     char err_buf[256] = "";
     strerror_r(errno, err_buf, CSTR_LEN(err_buf));
-    log_error("Failed to allocate new chunk with capacity %zu: %s", cap,
-              err_buf);
+    LOG_ERR("Failed to allocate new chunk with capacity %zu: %s", cap, err_buf);
     return NULL;
   }
 
@@ -39,7 +38,7 @@ Arena *arena_init(void) {
   if (arena == NULL) {
     char err_buf[256] = "";
     strerror_r(errno, err_buf, CSTR_LEN(err_buf));
-    log_error("Failed to create arena: %s", err_buf);
+    LOG_ERR("Failed to create arena: %s", err_buf);
     return NULL;
   }
 
@@ -69,7 +68,7 @@ void arena_destroy(Arena *arena) {
 
 void *arena_alloc_align(Arena *arena, size_t size, size_t alignment) {
   if (arena == NULL) {
-    log_error("Arena pointer is NULL");
+    LOG_ERR("Arena pointer is NULL");
     return NULL;
   }
 
@@ -113,7 +112,7 @@ void *arena_alloc_align(Arena *arena, size_t size, size_t alignment) {
 
 void *arena_alloc(Arena *arena, size_t size) {
   if (arena == NULL) {
-    log_error("Arena pointer is NULL");
+    LOG_ERR("Arena pointer is NULL");
     return NULL;
   }
 
@@ -122,7 +121,7 @@ void *arena_alloc(Arena *arena, size_t size) {
 
 void *arena_alloc_array(Arena *arena, size_t count, size_t size) {
   if (arena == NULL) {
-    log_error("Arena pointer is NULL");
+    LOG_ERR("Arena pointer is NULL");
     return NULL;
   }
 
@@ -137,7 +136,7 @@ void *arena_alloc_array(Arena *arena, size_t count, size_t size) {
 
 const char *arena_strdup(Arena *arena, const char *str, size_t len) {
   if (arena == NULL) {
-    log_error("Arena pointer is NULL");
+    LOG_ERR("Arena pointer is NULL");
     return NULL;
   }
 

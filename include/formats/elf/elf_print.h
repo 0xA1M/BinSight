@@ -215,7 +215,7 @@ static const LT_Entry osabi_names[] = {
     {ELFOSABI_STANDALONE, "Standalone (embedded) ABI"},
 };
 
-void print_elf_ehdr(Arena *arena, void *ehdr);
+void print_elf_ehdr(Arena *arena, const void *ehdr);
 
 /* ELF program headers */
 static const LT_Entry phdr_type_names[] = {
@@ -346,7 +346,30 @@ static const LT_Entry dyn_tag_names[] = {
 
 void print_elf_dynamic(Arena *arena, const ELFInfo *elf);
 
+/* ELF Relocation Tables */
+static const LT_Entry rel_type_names[] = {
+    {R_X86_64_NONE, "R_X86_64_NONE"},
+    {R_X86_64_64, "R_X86_64_64"},
+    {R_X86_64_PC32, "R_X86_64_PC32"},
+    {R_X86_64_GOT32, "R_X86_64_GOT32"},
+    {R_X86_64_PLT32, "R_X86_64_PLT32"},
+    {R_X86_64_COPY, "R_X86_64_COPY"},
+    {R_X86_64_GLOB_DAT, "R_X86_64_GLOB_DAT"},
+    {R_X86_64_JUMP_SLOT, "R_X86_64_JUMP_SLOT"},
+    {R_X86_64_RELATIVE, "R_X86_64_RELATIVE"},
+    {R_X86_64_DTPMOD64, "R_X86_64_DTPMOD64"},
+    {R_X86_64_DTPOFF64, "R_X86_64_DTPOFF64"},
+    {R_X86_64_TPOFF64, "R_X86_64_TPOFF64"},
+    {R_X86_64_TLSGD, "R_X86_64_TLSGD"},
+    {R_X86_64_TLSLD, "R_X86_64_TLSLD"},
+    {R_X86_64_DTPOFF32, "R_X86_64_DTPOFF32"},
+    {R_X86_64_GOTTPOFF, "R_X86_64_GOTTPOFF"},
+    {R_X86_64_TPOFF32, "R_X86_64_TPOFF32"},
+};
+
+void print_elf_reloc_tables(Arena *arena, const ELFInfo *elf);
+
 /* Print whole ELF */
-void print_elf(Arena *arena, ELFInfo *elf_ptr);
+void print_elf(Arena *arena, const ELFInfo *elf_ptr);
 
 #endif // ELF_PRINT_H

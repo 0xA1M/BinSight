@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "core/format.h"
-#include "core/utils.h"
 
 // TODO: Better Logging
 // TODO: Better command line argument using getopt and create the headless CLI
@@ -13,7 +13,7 @@ int main(int argc, const char **argv) {
     return EXIT_FAILURE;
   }
 
-  String path = CONST_STR(argv[1]);
+  String path = {.str = argv[1], .len = strlen(argv[1])};
   Binary *binary = load_binary(path);
   if (binary == NULL)
     goto cleanup;

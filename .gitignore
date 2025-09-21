@@ -66,3 +66,12 @@ vgcore.*
 
 # Clangd cache
 .cache/
+
+# Fuzzing artifacts
+fuzz/out/
+
+# Integrity test artifacts
+linux_integrity_test_out/
+
+# Core dumps
+core.*

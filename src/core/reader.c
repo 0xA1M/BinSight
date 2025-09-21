@@ -3,7 +3,7 @@
 #include "core/reader.h"
 
 #define CHECK_BOUNDS(reader, read_size)                                        \
-  CHECK((reader)->arena, (reader)->offset + (read_size) <= (reader)->size,     \
+  CHECK((reader)->arena, (read_size) <= (reader)->size - (reader)->offset,     \
         ERR_FORMAT_OUT_OF_BOUNDS,                                              \
         "Read of %zu bytes at offset %zu would exceed buffer size %zu",        \
         (size_t)(read_size), (reader)->offset, (reader)->size)

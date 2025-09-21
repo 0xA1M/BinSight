@@ -39,19 +39,42 @@ typedef struct ELFDynTab {
   uint64_t entry_size;
 } ELFDynTab;
 
-typedef struct ELFInfo {
-  Elf64_Ehdr *ehdr;
+typedef struct ELFRelTab {
+  String name;
+  uint64_t sh_type;
 
+  union {
+    Elf64_Rel *rel_entries;
+    Elf64_Rela *rela_entries;
+  };
+  uint64_t count;
+  uintptr_t offset;
+  uint64_t entry_size;
+
+  ELFSymTab *symtab;
+} ELFRelTab;
+
+typedef struct ELFRelNode {
+  ELFRelTab rel_tab;
+  struct ELFRelNode *next;
+} ELFRelNode;
+
+typedef struct ELFInfo {
+  // Headers
+  Elf64_Ehdr *ehdr;
   ELFPhdrs phdrs;
   ELFShdrs shdrs;
+
+  // Tables
   ELFSymTab symtab;
   ELFSymTab dynsym;
   ELFDynTab dynamic;
 
-  String interp;
+  // Relocation Tables linked list
+  ELFRelNode *rel_head;
 
-  Elf64_Rela *rela;
-  int rela_count;
+  // Miscellaneous
+  String interp;
 } ELFInfo;
 
 ELFInfo *init_elf(Arena *arena);

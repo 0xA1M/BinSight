@@ -1,4 +1,4 @@
-.PHONY: all build rebuild run run32 test check clean distclean release
+.PHONY: all build rebuild run run32 test check clean distclean release fuzz-build fuzz fuzz-clean
 
 all: build
 
@@ -37,3 +37,23 @@ distclean:
 release:
 	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 	cmake --build build --config Release
+
+# Fuzzing related targets
+FUZZER := afl-fuzz
+FUZZ_INPUT_DIR := fuzz/in
+FUZZ_OUTPUT_DIR := fuzz/out
+FUZZ_TARGET_BINARY := build/binsight
+
+fuzz-build: distclean
+	export CC=afl-clang-fast && \
+	export CXX=afl-clang-fast++ && \
+	export AFL_SKIP_CPUFREQ=1 && \
+	cmake -S . -B build -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) && \
+	cmake --build build
+
+fuzz: fuzz-build
+	mkdir -p $(FUZZ_INPUT_DIR)
+	$(FUZZER) -i $(FUZZ_INPUT_DIR) -o $(FUZZ_OUTPUT_DIR) -- ./$(FUZZ_TARGET_BINARY) @@
+
+fuzz-clean:
+	rm -rf $(FUZZ_OUTPUT_DIR)

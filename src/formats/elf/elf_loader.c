@@ -9,11 +9,6 @@ BError load_elf(Binary *bin) {
   CHECK(bin->arena, elf != NULL, ERR_MEM_ALLOC_FAILED,
         "Failed to allocate memory for ELFInfo");
 
-  CHECK(bin->arena, EI_CLASS < bin->size, ERR_FORMAT_HEADER_TOO_SMALL,
-        "ELF identification class byte is out of bounds");
-  CHECK(bin->arena, EI_DATA < bin->size, ERR_FORMAT_HEADER_TOO_SMALL,
-        "ELF identification data byte is out of bounds");
-
   bin->bitness = bin->data[EI_CLASS] == ELFCLASS32   ? BITNESS_32
                  : bin->data[EI_CLASS] == ELFCLASS64 ? BITNESS_64
                                                      : BITNESS_UNKNOWN;

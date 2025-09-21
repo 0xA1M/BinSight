@@ -8,13 +8,13 @@
 Binary *init_binary() {
   Binary *binary = calloc(1, sizeof(Binary));
   if (binary == NULL) {
-    log_error("Failed to allocate memory for BinaryFile structure");
+    LOG_ERR("Failed to allocate memory for BinaryFile structure");
     return NULL;
   }
 
   binary->arena = arena_init();
   if (binary->arena == NULL) {
-    log_error("Failed to initialize memory arena");
+    LOG_ERR("Failed to initialize memory arena");
     free(binary);
     return NULL;
   }

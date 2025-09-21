@@ -14,19 +14,19 @@ static const char *get_name_from_id(uint32_t id, const LT_Entry *table,
 }
 
 /* Print ELF Header */
-static const char *get_osabi_name(uint32_t osabi) {
+static const char *get_osabi_name(const uint32_t osabi) {
   return get_name_from_id(osabi, osabi_names, ARR_COUNT(osabi_names));
 }
 
-static const char *get_type_name(uint32_t type) {
+static const char *get_type_name(const uint32_t type) {
   return get_name_from_id(type, type_names, ARR_COUNT(type_names));
 }
 
-static const char *get_machine_name(uint32_t machine) {
+static const char *get_machine_name(const uint32_t machine) {
   return get_name_from_id(machine, machine_names, ARR_COUNT(machine_names));
 }
 
-static void print_e_ident(unsigned char *e_ident) {
+static void print_e_ident(const unsigned char *e_ident) {
   printf("ELF Header:\n");
   printf("  Magic:   ");
   for (int i = 0; i < EI_NIDENT; i++) {
@@ -70,7 +70,7 @@ static void print_e_ident(unsigned char *e_ident) {
   printf("  ABI Version:                       %d\n", e_ident[EI_ABIVERSION]);
 }
 
-void print_elf_ehdr(Arena *arena, void *header) {
+void print_elf_ehdr(Arena *arena, const void *header) {
   ASSERT_RET(arena, header != NULL, ERR_ARG_NULL,
              "Failed to print ELF header, header is NULL");
   Elf64_Ehdr *ehdr = (Elf64_Ehdr *)header;
@@ -99,7 +99,7 @@ void print_elf_ehdr(Arena *arena, void *header) {
 }
 
 /* Print ELF Program Header Table */
-static const char *phdr_type_to_str(uint32_t type) {
+static const char *phdr_type_to_str(const uint32_t type) {
   if (type >= PT_LOOS && type <= PT_HIOS)
     return "OS-SPECIFIC";
   if (type >= PT_LOPROC && type <= PT_HIPROC)
@@ -146,7 +146,7 @@ void print_elf_phdrs(Arena *arena, const void *phdrs, const uint16_t phnum) {
 }
 
 /* Print ELF Section Header Table */
-static const char *shdr_type_to_str(uint32_t type) {
+static const char *shdr_type_to_str(const uint32_t type) {
   if (type >= SHT_LOOS && type <= SHT_HIOS)
     return "OS-SPECIFIC";
   if (type >= SHT_LOPROC && type <= SHT_HIPROC)
@@ -202,17 +202,17 @@ void print_elf_shdrs(Arena *arena, const void *shdrs, const uint16_t shnum,
 }
 
 /* Print ELF Symbol Table */
-static const char *get_sym_bind_name(uint8_t info) {
+static const char *get_sym_bind_name(const uint8_t info) {
   return get_name_from_id(ELF64_ST_BIND(info), sym_bind_names,
                           ARR_COUNT(sym_bind_names));
 }
 
-static const char *get_sym_type_name(uint8_t info) {
+static const char *get_sym_type_name(const uint8_t info) {
   return get_name_from_id(ELF64_ST_TYPE(info), sym_type_names,
                           ARR_COUNT(sym_type_names));
 }
 
-static const char *get_sym_visibility_name(uint8_t other) {
+static const char *get_sym_visibility_name(const uint8_t other) {
   return get_name_from_id(ELF64_ST_VISIBILITY(other), sym_visibility_names,
                           ARR_COUNT(sym_visibility_names));
 }
@@ -261,7 +261,7 @@ void print_elf_syms(Arena *arena, const void *syms_ptr,
 }
 
 /* Print ELF Dynamic Section */
-static const char *get_dynamic_tag_name(uint64_t tag) {
+static const char *get_dynamic_tag_name(const uint64_t tag) {
   if (tag >= DT_LOOS && tag <= DT_HIOS)
     return "OS-SPECIFIC";
   if (tag >= DT_LOPROC && tag <= DT_HIPROC)
@@ -320,8 +320,98 @@ void print_elf_dynamic(Arena *arena, const ELFInfo *elf) {
   }
 }
 
+/* Print ELF Relocation tables */
+static const char *get_rel_type_name(const uint64_t type) {
+  return get_name_from_id(type, rel_type_names, ARR_COUNT(rel_type_names));
+}
+
+static void print_single_reloc_table(Arena *arena, const ELFRelTab *reloc_tab) {
+  ASSERT_RET(arena, reloc_tab != NULL, ERR_ARG_NULL,
+             "Cannot print relocation table: missing data");
+
+  printf("\nRelocation section '%.*s' at offset 0x%lx contains %lu entries:\n",
+         (int)reloc_tab->name.len, reloc_tab->name.str, reloc_tab->offset,
+         reloc_tab->count);
+
+  if (reloc_tab->sh_type == SHT_RELA) {
+    printf("  Offset          Info           Type           Sym. Value   Sym. "
+           "Name + Addend\n");
+
+    for (uint64_t i = 0; i < reloc_tab->count; ++i) {
+      const Elf64_Rela *rela = &reloc_tab->rela_entries[i];
+      uint64_t sym_idx = ELF64_R_SYM(rela->r_info);
+      uint64_t type = ELF64_R_TYPE(rela->r_info);
+
+      const char *sym_name = "UND";
+      uint64_t sym_value = 0;
+      uint64_t symtab_count = 0;
+      const char *symtab_str = NULL;
+
+      if (reloc_tab->symtab != NULL) {
+        symtab_count = reloc_tab->symtab->count;
+        symtab_str = reloc_tab->symtab->strtab.str;
+      }
+
+      if (reloc_tab->symtab != NULL && sym_idx < symtab_count) {
+        const Elf64_Sym *sym = &reloc_tab->symtab->symbols[sym_idx];
+        if (symtab_str != NULL &&
+            sym->st_name < reloc_tab->symtab->strtab.len) {
+          sym_name = symtab_str + sym->st_name;
+        }
+        sym_value = sym->st_value;
+      }
+
+      printf("%016lx  %012lx %-14s %016lx  %s %+ld\n", rela->r_offset,
+             rela->r_info, get_rel_type_name(type), sym_value, sym_name,
+             rela->r_addend);
+    }
+  } else { // SHT_REL
+    printf("  Offset          Info           Type           Sym. Value   Sym. "
+           "Name\n");
+
+    for (uint64_t i = 0; i < reloc_tab->count; ++i) {
+      const Elf64_Rel *rel = &reloc_tab->rel_entries[i];
+      uint64_t sym_idx = ELF64_R_SYM(rel->r_info);
+      uint64_t type = ELF64_R_TYPE(rel->r_info);
+
+      const char *sym_name = "UND";
+      uint64_t sym_value = 0;
+      uint64_t symtab_count = 0;
+      const char *symtab_str = NULL;
+
+      if (reloc_tab->symtab != NULL) {
+        symtab_count = reloc_tab->symtab->count;
+        symtab_str = reloc_tab->symtab->strtab.str;
+      }
+
+      if (reloc_tab->symtab != NULL && sym_idx < symtab_count) {
+        const Elf64_Sym *sym = &reloc_tab->symtab->symbols[sym_idx];
+        if (symtab_str != NULL &&
+            sym->st_name < reloc_tab->symtab->strtab.len) {
+          sym_name = symtab_str + sym->st_name;
+        }
+        sym_value = sym->st_value;
+      }
+
+      printf("%016lx  %012lx %-14s %016lx  %s\n", rel->r_offset, rel->r_info,
+             get_rel_type_name(type), sym_value, sym_name);
+    }
+  }
+}
+
+void print_elf_reloc_tables(Arena *arena, const ELFInfo *elf) {
+  ASSERT_RET(arena, elf != NULL, ERR_ARG_NULL,
+             "Cannot print relocation tables: ELFInfo struct is NULL");
+
+  ELFRelNode *current_node = elf->rel_head;
+  while (current_node != NULL) {
+    print_single_reloc_table(arena, &current_node->rel_tab);
+    current_node = current_node->next;
+  }
+}
+
 /* Print whole ELF (readelf-style) */
-void print_elf(Arena *arena, ELFInfo *elf) {
+void print_elf(Arena *arena, const ELFInfo *elf) {
   ASSERT_RET(arena, elf != NULL, ERR_ARG_NULL,
              "Cannot print ELF: ELFInfo struct is NULL");
 
@@ -334,4 +424,5 @@ void print_elf(Arena *arena, ELFInfo *elf) {
   print_elf_syms(arena, elf->symtab.symbols, elf->symtab.count,
                  elf->symtab.strtab.str, elf->symtab.strtab.len, ".symtab");
   print_elf_dynamic(arena, elf);
+  print_elf_reloc_tables(arena, elf);
 }
