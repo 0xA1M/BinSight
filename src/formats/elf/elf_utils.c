@@ -1,4 +1,5 @@
 #include "core/error.h"
+#include <elf.h>
 
 #include "formats/elf/elf_utils.h"
 
@@ -32,4 +33,15 @@ const Elf64_Phdr *elf_get_segment_by_type(const ELFPhdrs *phdrs,
       return &phdrs->headers[i];
 
   return NULL;
+}
+
+uint64_t elf_get_dynamic_entry_val(const ELFDynTab *dynamic, uint32_t tag) {
+  if (dynamic == NULL || tag == 0)
+    return 0;
+
+  for (uint64_t i = 0; i < dynamic->count; i++)
+    if (dynamic->entries[i].d_tag == tag)
+      return dynamic->entries[i].d_un.d_val;
+
+  return 0;
 }

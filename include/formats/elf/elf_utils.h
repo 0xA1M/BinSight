@@ -54,10 +54,10 @@ typedef struct ELFRelTab {
   ELFSymTab *symtab;
 } ELFRelTab;
 
-typedef struct ELFRelNode {
-  ELFRelTab rel_tab;
-  struct ELFRelNode *next;
-} ELFRelNode;
+typedef struct ELFRelocations {
+  ELFRelTab *tables;
+  uint16_t count;
+} ELFRelocations;
 
 typedef struct ELFInfo {
   // Headers
@@ -69,9 +69,7 @@ typedef struct ELFInfo {
   ELFSymTab symtab;
   ELFSymTab dynsym;
   ELFDynTab dynamic;
-
-  // Relocation Tables linked list
-  ELFRelNode *rel_head;
+  ELFRelocations relocs;
 
   // Miscellaneous
   String interp;
@@ -81,5 +79,6 @@ ELFInfo *init_elf(Arena *arena);
 
 const Elf64_Shdr *elf_get_section_by_type(const ELFShdrs *shdrs, uint32_t type);
 const Elf64_Phdr *elf_get_segment_by_type(const ELFPhdrs *phdrs, uint32_t type);
+uint64_t elf_get_dynamic_entry_val(const ELFDynTab *dynamic, uint32_t tag);
 
 #endif // ELF_UTILS_H

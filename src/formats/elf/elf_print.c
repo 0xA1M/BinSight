@@ -403,11 +403,13 @@ void print_elf_reloc_tables(Arena *arena, const ELFInfo *elf) {
   ASSERT_RET(arena, elf != NULL, ERR_ARG_NULL,
              "Cannot print relocation tables: ELFInfo struct is NULL");
 
-  ELFRelNode *current_node = elf->rel_head;
-  while (current_node != NULL) {
-    print_single_reloc_table(arena, &current_node->rel_tab);
-    current_node = current_node->next;
+  if (elf->relocs.tables == NULL || elf->relocs.count == 0) {
+    printf("\nNo relocation sections found.\n");
+    return;
   }
+
+  for (uint64_t i = 0; i < elf->relocs.count; ++i)
+    print_single_reloc_table(arena, &elf->relocs.tables[i]);
 }
 
 /* Print whole ELF (readelf-style) */

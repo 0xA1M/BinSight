@@ -356,50 +356,46 @@ static BError parse_rela_entry(Reader *reader, Elf64_Rela *rela_ent) {
   return BERR_OK;
 }
 
-static BError parse_reloc_tab_entry(Reader *reader, ELFRelNode *rel_node,
-                                    const uint32_t sh_type) {
+static BError parse_reloc_tab_entries(Reader *reader, ELFRelTab *rel_tab,
+                                      const uint32_t sh_type) {
   uint64_t total_reloc_size = 0;
   CHECK(reader->arena,
-        !__builtin_mul_overflow(rel_node->rel_tab.count,
-                                rel_node->rel_tab.entry_size,
+        !__builtin_mul_overflow(rel_tab->count, rel_tab->entry_size,
                                 &total_reloc_size),
         ERR_ARG_OUT_OF_RANGE,
         "Integer overflow when calculating total relocations size");
 
-  CHECK(reader->arena, rel_node->rel_tab.offset <= reader->size,
+  CHECK(reader->arena, rel_tab->offset <= reader->size,
         ERR_FORMAT_OUT_OF_BOUNDS,
         "Relocation tables offset (0x%lx) is out of bounds (size: 0x%zx)",
-        rel_node->rel_tab.offset, reader->size);
-  CHECK(reader->arena,
-        total_reloc_size <= reader->size - rel_node->rel_tab.offset,
+        rel_tab->offset, reader->size);
+  CHECK(reader->arena, total_reloc_size <= reader->size - rel_tab->offset,
         ERR_FORMAT_OUT_OF_BOUNDS,
         "Relocation table (size 0x%lx at offset 0x%lx) is out of bounds (file "
         "size: 0x%zx)",
-        total_reloc_size, rel_node->rel_tab.offset, reader->size);
+        total_reloc_size, rel_tab->offset, reader->size);
 
   if (sh_type == SHT_REL) {
-    rel_node->rel_tab.rel_entries = (Elf64_Rel *)arena_alloc_array(
-        reader->arena, rel_node->rel_tab.count, sizeof(Elf64_Rel));
-    CHECK(reader->arena, rel_node->rel_tab.rel_entries != NULL,
-          ERR_MEM_ALLOC_FAILED, "Failed to allocate memory for REL entries");
+    rel_tab->rel_entries = (Elf64_Rel *)arena_alloc_array(
+        reader->arena, rel_tab->count, sizeof(Elf64_Rel));
+    CHECK(reader->arena, rel_tab->rel_entries != NULL, ERR_MEM_ALLOC_FAILED,
+          "Failed to allocate memory for REL entries");
 
-    for (size_t i = 0; i < rel_node->rel_tab.count; i++) {
-      size_t offset =
-          rel_node->rel_tab.offset + rel_node->rel_tab.entry_size * i;
+    for (size_t i = 0; i < rel_tab->count; i++) {
+      size_t offset = rel_tab->offset + rel_tab->entry_size * i;
       RET_IF_ERR(reader_seek(reader, offset));
-      RET_IF_ERR(parse_rel_entry(reader, &rel_node->rel_tab.rel_entries[i]));
+      RET_IF_ERR(parse_rel_entry(reader, &rel_tab->rel_entries[i]));
     }
   } else { // SHT_RELA
-    rel_node->rel_tab.rela_entries = (Elf64_Rela *)arena_alloc_array(
-        reader->arena, rel_node->rel_tab.count, sizeof(Elf64_Rela));
-    CHECK(reader->arena, rel_node->rel_tab.rela_entries != NULL,
-          ERR_MEM_ALLOC_FAILED, "Failed to allocate memory for RELA entries");
+    rel_tab->rela_entries = (Elf64_Rela *)arena_alloc_array(
+        reader->arena, rel_tab->count, sizeof(Elf64_Rela));
+    CHECK(reader->arena, rel_tab->rela_entries != NULL, ERR_MEM_ALLOC_FAILED,
+          "Failed to allocate memory for RELA entries");
 
-    for (size_t i = 0; i < rel_node->rel_tab.count; ++i) {
-      size_t offset =
-          rel_node->rel_tab.offset + i * rel_node->rel_tab.entry_size;
+    for (size_t i = 0; i < rel_tab->count; ++i) {
+      size_t offset = rel_tab->offset + i * rel_tab->entry_size;
       RET_IF_ERR(reader_seek(reader, offset));
-      RET_IF_ERR(parse_rela_entry(reader, &rel_node->rel_tab.rela_entries[i]));
+      RET_IF_ERR(parse_rela_entry(reader, &rel_tab->rela_entries[i]));
     }
   }
 
@@ -407,12 +403,8 @@ static BError parse_reloc_tab_entry(Reader *reader, ELFRelNode *rel_node,
 }
 
 static BError parse_reloc_table(Reader *reader, ELFInfo *elf,
-                                const Elf64_Shdr *reloc_hdr, uint32_t sh_type) {
-  ELFRelNode *rel_node =
-      (ELFRelNode *)arena_alloc(reader->arena, sizeof(ELFRelNode));
-  CHECK(reader->arena, rel_node != NULL, ERR_MEM_ALLOC_FAILED,
-        "Failed to allocate memory for relocation node");
-
+                                const Elf64_Shdr *reloc_hdr,
+                                ELFRelTab *rel_tab) {
   if (!IS_STR_EMPTY(elf->shdrs.strtab)) {
     CHECK(reader->arena, reloc_hdr->sh_name < elf->shdrs.strtab.len,
           ERR_FORMAT_OUT_OF_BOUNDS,
@@ -420,69 +412,79 @@ static BError parse_reloc_table(Reader *reader, ELFInfo *elf,
 
     const char *reloc_name =
         (const char *)(elf->shdrs.strtab.str + reloc_hdr->sh_name);
-    rel_node->rel_tab.name =
-        string_new(reader->arena, reloc_name, strlen(reloc_name));
+    rel_tab->name = string_new(reader->arena, reloc_name, strlen(reloc_name));
   }
 
-  rel_node->rel_tab.sh_type = sh_type;
-  rel_node->rel_tab.offset = reloc_hdr->sh_offset;
-  rel_node->rel_tab.entry_size = reloc_hdr->sh_entsize;
-  rel_node->rel_tab.count = reloc_hdr->sh_entsize > 0
-                                ? reloc_hdr->sh_size / reloc_hdr->sh_entsize
-                                : 0;
+  rel_tab->sh_type = reloc_hdr->sh_type;
+  rel_tab->offset = reloc_hdr->sh_offset;
+  rel_tab->entry_size = reloc_hdr->sh_entsize;
+  rel_tab->count = reloc_hdr->sh_entsize > 0
+                       ? reloc_hdr->sh_size / reloc_hdr->sh_entsize
+                       : 0;
 
   size_t expected_reloc_size =
-      (sh_type == SHT_REL)
+      (reloc_hdr->sh_type == SHT_REL)
           ? ((reader->bitness == BITNESS_32) ? sizeof(Elf32_Rel)
                                              : sizeof(Elf64_Rel))
           : ((reader->bitness == BITNESS_32) ? sizeof(Elf32_Rela)
                                              : sizeof(Elf64_Rela));
 
   if (reloc_hdr->sh_entsize > 0)
-    CHECK(reader->arena, rel_node->rel_tab.entry_size == expected_reloc_size,
+    CHECK(reader->arena, rel_tab->entry_size == expected_reloc_size,
           ERR_FORMAT_INVALID_FIELD,
           "Invalid relocation entry size: got %lu, expected %zu",
-          rel_node->rel_tab.entry_size, expected_reloc_size);
+          rel_tab->entry_size, expected_reloc_size);
 
   CHECK(reader->arena, reloc_hdr->sh_link < elf->shdrs.count,
         ERR_FORMAT_BAD_INDEX,
         "Relocation section '" STR "' has an out-of-bounds sh_link (%u)",
-        (int)rel_node->rel_tab.name.len, rel_node->rel_tab.name.str,
-        reloc_hdr->sh_link);
+        (int)rel_tab->name.len, rel_tab->name.str, reloc_hdr->sh_link);
 
   const Elf64_Shdr *linked_shdr = &elf->shdrs.headers[reloc_hdr->sh_link];
   switch (linked_shdr->sh_type) {
   case SHT_SYMTAB:
-    rel_node->rel_tab.symtab = &elf->symtab;
+    rel_tab->symtab = &elf->symtab;
     break;
   case SHT_DYNSYM:
-    rel_node->rel_tab.symtab = &elf->dynsym;
+    rel_tab->symtab = &elf->dynsym;
     break;
   default: // TODO: Better handling
-    rel_node->rel_tab.symtab = NULL;
+    rel_tab->symtab = NULL;
 
     LOG_ERR("Relocation section '%.*s' links to a non-symbol table "
             "(type: %u)",
-            (int)rel_node->rel_tab.name.len, rel_node->rel_tab.name.str,
-            linked_shdr->sh_type);
+            (int)rel_tab->name.len, rel_tab->name.str, linked_shdr->sh_type);
     break;
   }
 
-  if (rel_node->rel_tab.count > 0)
-    RET_IF_ERR(parse_reloc_tab_entry(reader, rel_node, sh_type));
-
-  // Add to linked list
-  rel_node->next = elf->rel_head;
-  elf->rel_head = rel_node;
+  if (rel_tab->count > 0)
+    RET_IF_ERR(parse_reloc_tab_entries(reader, rel_tab, reloc_hdr->sh_type));
 
   return BERR_OK;
 }
 
 struct BError parse_reloc_tables(Reader *reader, ELFInfo *elf) {
+  uint16_t reloc_count = 0;
   for (uint16_t i = 0; i < elf->shdrs.count; i++) {
     const Elf64_Shdr *shdr = &elf->shdrs.headers[i];
     if (shdr->sh_type == SHT_REL || shdr->sh_type == SHT_RELA)
-      RET_IF_ERR(parse_reloc_table(reader, elf, shdr, shdr->sh_type));
+      reloc_count++;
+  }
+
+  elf->relocs.count = reloc_count;
+  if (reloc_count > 0) {
+    elf->relocs.tables = (ELFRelTab *)arena_alloc_array(
+        reader->arena, reloc_count, sizeof(ELFRelTab));
+    CHECK(reader->arena, elf->relocs.tables != NULL, ERR_MEM_ALLOC_FAILED,
+          "Failed to allocate memory for ELF relocation tables array");
+
+    uint64_t current_reloc_ndx = 0;
+    for (uint16_t i = 0; i < elf->shdrs.count; i++) {
+      const Elf64_Shdr *shdr = &elf->shdrs.headers[i];
+      if (shdr->sh_type == SHT_REL || shdr->sh_type == SHT_RELA)
+        RET_IF_ERR(parse_reloc_table(reader, elf, shdr,
+                                     &elf->relocs.tables[current_reloc_ndx++]));
+    }
   }
 
   return BERR_OK;
@@ -507,7 +509,7 @@ static BError parse_tables(Reader *reader, ELFInfo *elf) {
 }
 
 // Parse miscellaneous data
-static BError parse_elf_interp(Reader *reader, ELFInfo *elf) {
+static BError parse_interp(Reader *reader, ELFInfo *elf) {
   const Elf64_Phdr *interp = elf_get_segment_by_type(&elf->phdrs, PT_INTERP);
   if (interp == NULL) {
     memset(&elf->interp, 0, sizeof(String));
@@ -545,7 +547,7 @@ BError parse_elf(const Binary *bin, ELFInfo *elf) {
     RET_IF_ERR(parse_tables(&reader, elf));
 
   /* Miscellaneous Data */
-  RET_IF_ERR(parse_elf_interp(&reader, elf));
+  RET_IF_ERR(parse_interp(&reader, elf));
 
   return BERR_OK;
 }
