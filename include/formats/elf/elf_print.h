@@ -369,6 +369,14 @@ static const LT_Entry rel_type_names[] = {
 
 void print_elf_reloc_tables(Arena *arena, const ELFInfo *elf);
 
+/* Versioning Info */
+void print_elf_version_symbols(const ELFVersymTab *versym_tab,
+                               const ELFSymTab *dynsym_tab,
+                               const ELFVerdefTab *verdef_tab);
+void print_elf_version_definitions(const ELFVerdefTab *verdef_tab);
+void print_elf_version_needed(const ELFVerneedTab *verneed_tab,
+                              const ELFSymTab *dynstr_tab);
+
 /* Print whole ELF */
 void print_elf(Arena *arena, const ELFInfo *elf_ptr);
 

@@ -1,4 +1,5 @@
 #include <elf.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "core/binary.h"
@@ -69,6 +70,7 @@ static BError parse_program_headers(Reader *reader, ELFPhdrs *phdrs) {
     RET_IF_ERR(reader_seek(reader, offset));
     RET_IF_ERR(parse_program_header(reader, &phdrs->headers[i]));
   }
+
   return BERR_OK;
 }
 
@@ -108,6 +110,7 @@ static BError parse_section_headers(Reader *reader, ELFShdrs *shdrs) {
     RET_IF_ERR(reader_seek(reader, offset));
     RET_IF_ERR(parse_section_header(reader, &shdrs->headers[i]));
   }
+
   return BERR_OK;
 }
 
@@ -531,6 +534,219 @@ static BError parse_interp(Reader *reader, ELFInfo *elf) {
   return BERR_OK;
 }
 
+static BError parse_version_symbols(Reader *reader, ELFInfo *elf) {
+  const Elf64_Shdr *versym_hdr =
+      elf_get_section_by_type(&elf->shdrs, SHT_GNU_versym);
+  if (versym_hdr == NULL) {
+    memset(&elf->versym, 0, sizeof(ELFVersymTab));
+    return BERR_OK;
+  }
+
+  elf->versym.offset = versym_hdr->sh_offset;
+  elf->versym.count = versym_hdr->sh_size / sizeof(Elf64_Versym);
+
+  if (elf->versym.count > 0) {
+    elf->versym.entries = arena_alloc_array(reader->arena, elf->versym.count,
+                                            sizeof(Elf64_Versym));
+    CHECK(reader->arena, elf->versym.entries != NULL, ERR_MEM_ALLOC_FAILED,
+          "Failed to allocate %lu versym entries (section .gnu.version, size "
+          "%lu bytes)",
+          elf->versym.count, versym_hdr->sh_size);
+
+    RET_IF_ERR(reader_seek(reader, elf->versym.offset));
+    for (uint64_t i = 0; i < elf->versym.count; i++)
+      RET_IF_ERR(reader_read_word(reader, &elf->versym.entries[i]));
+  }
+
+  return BERR_OK;
+}
+
+static BError parse_verdef_entry(Reader *reader, Elf64_Verdef *verdef_entry) {
+  RET_IF_ERR(reader_read_word(reader, &verdef_entry->vd_version));
+  RET_IF_ERR(reader_read_word(reader, &verdef_entry->vd_flags));
+  RET_IF_ERR(reader_read_word(reader, &verdef_entry->vd_ndx));
+  RET_IF_ERR(reader_read_word(reader, &verdef_entry->vd_cnt));
+  RET_IF_ERR(reader_read_dword(reader, &verdef_entry->vd_hash));
+  RET_IF_ERR(reader_read_dword(reader, &verdef_entry->vd_aux));
+  RET_IF_ERR(reader_read_dword(reader, &verdef_entry->vd_next));
+  return BERR_OK;
+}
+
+static BError parse_verdaux_entry(Reader *reader,
+                                  Elf64_Verdaux *verdaux_entry) {
+  RET_IF_ERR(reader_read_dword(reader, &verdaux_entry->vda_name));
+  RET_IF_ERR(reader_read_dword(reader, &verdaux_entry->vda_next));
+  return BERR_OK;
+}
+
+static BError parse_version_definitions(Reader *reader, ELFInfo *elf) {
+  const Elf64_Shdr *verdef_hdr =
+      elf_get_section_by_type(&elf->shdrs, SHT_GNU_verdef);
+  if (verdef_hdr == NULL) {
+    memset(&elf->verdef, 0, sizeof(ELFVerdef));
+    return BERR_OK;
+  }
+
+  elf->verdef.offset = verdef_hdr->sh_offset;
+  elf->verdef.count = verdef_hdr->sh_info;
+
+  if (elf->verdef.count > 0) {
+    elf->verdef.entries = (ELFVerdef **)arena_alloc_array(
+        reader->arena, elf->verdef.count, sizeof(ELFVerdef *));
+    CHECK(reader->arena, elf->verdef.entries != NULL, ERR_MEM_ALLOC_FAILED,
+          "Failed to allocate %lu verdef entries (section .gnu.version_d, size "
+          "%lu bytes)",
+          elf->verdef.count, verdef_hdr->sh_size);
+
+    uintptr_t current_offset = verdef_hdr->sh_offset;
+    for (uint64_t i = 0; i < elf->verdef.count; ++i) {
+      ELFVerdef *verdef =
+          (ELFVerdef *)arena_alloc(reader->arena, sizeof(ELFVerdef));
+      CHECK(reader->arena, verdef != NULL, ERR_MEM_ALLOC_FAILED,
+            "Failed to allocate verdef entry #%lu", i);
+      elf->verdef.entries[i] = verdef;
+
+      RET_IF_ERR(reader_seek(reader, current_offset));
+      RET_IF_ERR(parse_verdef_entry(reader, &verdef->verdef));
+
+      // Get the name of the version definition
+      if (elf->dynsym.strtab.str && verdef->verdef.vd_aux > 0) {
+        uintptr_t temp_offset = current_offset + verdef->verdef.vd_aux;
+
+        if (temp_offset < reader->size) {
+          Elf64_Verdaux temp_verdaux = {0};
+          size_t original_reader_offset = reader_get_offset(reader);
+
+          RET_IF_ERR(reader_seek(reader, temp_offset));
+          RET_IF_ERR(parse_verdaux_entry(reader, &temp_verdaux));
+
+          verdef->name = string_new(
+              reader->arena, elf->dynsym.strtab.str + temp_verdaux.vda_name,
+              strlen(elf->dynsym.strtab.str + temp_verdaux.vda_name));
+
+          RET_IF_ERR(reader_seek(reader, original_reader_offset));
+        }
+      }
+
+      // Parse Verdaux entries
+      verdef->verdaux.count = verdef->verdef.vd_cnt;
+      if (verdef->verdaux.count > 0) {
+        verdef->verdaux.entries = (Elf64_Verdaux *)arena_alloc_array(
+            reader->arena, verdef->verdaux.count, sizeof(Elf64_Verdaux));
+        CHECK(reader->arena, verdef->verdaux.entries != NULL,
+              ERR_MEM_ALLOC_FAILED,
+              "Failed to allocate %hu Verdaux entries for verdef %lu",
+              verdef->verdaux.count, i);
+
+        uintptr_t verdaux_current_offset =
+            current_offset + verdef->verdef.vd_aux;
+        for (uint16_t j = 0; j < verdef->verdaux.count; ++j) {
+          RET_IF_ERR(reader_seek(reader, verdaux_current_offset));
+          RET_IF_ERR(parse_verdaux_entry(reader, &verdef->verdaux.entries[j]));
+
+          if (verdef->verdaux.entries[j].vda_next == 0)
+            break;
+          verdaux_current_offset += verdef->verdaux.entries[j].vda_next;
+        }
+      }
+
+      if (verdef->verdef.vd_next == 0)
+        break;
+      current_offset += verdef->verdef.vd_next;
+    }
+  }
+
+  return BERR_OK;
+}
+
+static BError parse_verneed_entry(Reader *reader,
+                                  Elf64_Verneed *verneed_entry) {
+  RET_IF_ERR(reader_read_word(reader, &verneed_entry->vn_version));
+  RET_IF_ERR(reader_read_word(reader, &verneed_entry->vn_cnt));
+  RET_IF_ERR(reader_read_dword(reader, &verneed_entry->vn_file));
+  RET_IF_ERR(reader_read_dword(reader, &verneed_entry->vn_aux));
+  RET_IF_ERR(reader_read_dword(reader, &verneed_entry->vn_next));
+  return BERR_OK;
+}
+
+static BError parse_vernaux_entry(Reader *reader,
+                                  Elf64_Vernaux *vernaux_entry) {
+  RET_IF_ERR(reader_read_dword(reader, &vernaux_entry->vna_hash));
+  RET_IF_ERR(reader_read_word(reader, &vernaux_entry->vna_flags));
+  RET_IF_ERR(reader_read_word(reader, &vernaux_entry->vna_other));
+  RET_IF_ERR(reader_read_dword(reader, &vernaux_entry->vna_name));
+  RET_IF_ERR(reader_read_dword(reader, &vernaux_entry->vna_next));
+  return BERR_OK;
+}
+
+static BError parse_version_needs(Reader *reader, ELFInfo *elf) {
+  const Elf64_Shdr *verneed_hdr =
+      elf_get_section_by_type(&elf->shdrs, SHT_GNU_verneed);
+  if (verneed_hdr == NULL) {
+    memset(&elf->verneed, 0, sizeof(ELFVerneedTab));
+    return BERR_OK;
+  }
+
+  elf->verneed.offset = verneed_hdr->sh_offset;
+  elf->verneed.count = verneed_hdr->sh_info;
+
+  if (elf->verneed.count > 0) {
+    elf->verneed.entries = (ELFVerneed **)arena_alloc_array(
+        reader->arena, elf->verneed.count, sizeof(ELFVerneed *));
+    CHECK(
+        reader->arena, elf->verneed.entries != NULL, ERR_MEM_ALLOC_FAILED,
+        "Failed to allocate %lu verneed entries (section .gnu.version_r, size "
+        "%lu bytes)",
+        elf->verneed.count, verneed_hdr->sh_size);
+
+    uintptr_t current_offset = elf->verneed.offset;
+    for (uint64_t i = 0; i < elf->verneed.count; ++i) {
+      ELFVerneed *verneed =
+          (ELFVerneed *)arena_alloc(reader->arena, sizeof(ELFVerneed));
+      CHECK(reader->arena, verneed != NULL, ERR_MEM_ALLOC_FAILED,
+            "Failed to allocate verneed entry %lu", i);
+      elf->verneed.entries[i] = verneed;
+
+      RET_IF_ERR(reader_seek(reader, current_offset));
+      RET_IF_ERR(parse_verneed_entry(reader, &verneed->verneed));
+
+      // Get the file name from the dynamic string table
+      if (elf->dynsym.strtab.str &&
+          verneed->verneed.vn_file < elf->dynsym.strtab.len)
+        verneed->file_name = string_new(
+            reader->arena, elf->dynsym.strtab.str + verneed->verneed.vn_file,
+            strlen(elf->dynsym.strtab.str + verneed->verneed.vn_file));
+
+      verneed->vernaux.count = verneed->verneed.vn_cnt;
+      if (verneed->vernaux.count > 0) {
+        verneed->vernaux.entries = (Elf64_Vernaux *)arena_alloc_array(
+            reader->arena, verneed->vernaux.count, sizeof(Elf64_Vernaux));
+        CHECK(reader->arena, verneed->vernaux.entries != NULL,
+              ERR_MEM_ALLOC_FAILED,
+              "Failed to allocate %hu Vernaux entries for verneed %lu",
+              verneed->vernaux.count, i);
+
+        uintptr_t vernaux_current_offset =
+            current_offset + verneed->verneed.vn_aux;
+        for (uint16_t j = 0; j < verneed->vernaux.count; j++) {
+          RET_IF_ERR(reader_seek(reader, vernaux_current_offset));
+          RET_IF_ERR(parse_vernaux_entry(reader, &verneed->vernaux.entries[j]));
+
+          if (verneed->vernaux.entries[j].vna_next == 0)
+            break;
+          vernaux_current_offset += verneed->vernaux.entries[j].vna_next;
+        }
+      }
+
+      if (verneed->verneed.vn_next == 0)
+        break;
+      current_offset += verneed->verneed.vn_next;
+    }
+  }
+
+  return BERR_OK;
+}
+
 BError parse_elf(const Binary *bin, ELFInfo *elf) {
   CHECK(bin->arena, bin->bitness != BITNESS_UNKNOWN, ERR_ARG_INVALID,
         "Unknown bitness");
@@ -548,6 +764,10 @@ BError parse_elf(const Binary *bin, ELFInfo *elf) {
 
   /* Miscellaneous Data */
   RET_IF_ERR(parse_interp(&reader, elf));
+
+  RET_IF_ERR(parse_version_symbols(&reader, elf));
+  RET_IF_ERR(parse_version_definitions(&reader, elf));
+  RET_IF_ERR(parse_version_needs(&reader, elf));
 
   return BERR_OK;
 }

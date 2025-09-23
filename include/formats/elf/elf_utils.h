@@ -59,6 +59,44 @@ typedef struct ELFRelocations {
   uint16_t count;
 } ELFRelocations;
 
+typedef struct ELFVersymTab {
+  Elf64_Versym *entries;
+  uint64_t count;
+  uintptr_t offset;
+} ELFVersymTab;
+
+typedef struct ELFVerdef {
+  Elf64_Verdef verdef;
+  String name;
+
+  struct verdaux {
+    Elf64_Verdaux *entries;
+    uint16_t count;
+  } verdaux;
+} ELFVerdef;
+
+typedef struct ELFVerdefTab {
+  ELFVerdef **entries;
+  uint64_t count;
+  uintptr_t offset;
+} ELFVerdefTab;
+
+typedef struct ELFVerneed {
+  Elf64_Verneed verneed;
+  String file_name;
+
+  struct vernaux {
+    Elf64_Vernaux *entries;
+    uint16_t count;
+  } vernaux;
+} ELFVerneed;
+
+typedef struct ELFVerneedTab {
+  ELFVerneed **entries;
+  uint64_t count;
+  uintptr_t offset;
+} ELFVerneedTab;
+
 typedef struct ELFInfo {
   // Headers
   Elf64_Ehdr *ehdr;
@@ -73,6 +111,10 @@ typedef struct ELFInfo {
 
   // Miscellaneous
   String interp;
+
+  ELFVersymTab versym;
+  ELFVerdefTab verdef;
+  ELFVerneedTab verneed;
 } ELFInfo;
 
 ELFInfo *init_elf(Arena *arena);

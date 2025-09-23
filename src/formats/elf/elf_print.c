@@ -4,6 +4,8 @@
 #include "core/error.h"
 #include "formats/elf/elf_print.h"
 
+#define VER_NDX_HIDDEN 0x8000
+
 static const char *get_name_from_id(uint32_t id, const LT_Entry *table,
                                     uint64_t table_count) {
   for (size_t i = 0; i < table_count; i++)
@@ -412,6 +414,115 @@ void print_elf_reloc_tables(Arena *arena, const ELFInfo *elf) {
     print_single_reloc_table(arena, &elf->relocs.tables[i]);
 }
 
+/* Print ELF Version info */
+static const char *ver_sym_name(uint16_t idx) {
+  if (idx == VER_NDX_LOCAL)
+    return "*local*";
+  if (idx == VER_NDX_GLOBAL)
+    return "*global*";
+  return NULL;
+}
+
+void print_elf_version_symbols(const ELFVersymTab *versym_tab,
+                               const ELFSymTab *dynsym_tab,
+                               const ELFVerdefTab *verdef_tab) {
+  if (!versym_tab || !versym_tab->entries || versym_tab->count == 0) {
+    printf("\nNo version symbols found.\n");
+    return;
+  }
+
+  printf("\nVersion symbols section '.gnu.version' contains %lu entries:\n",
+         versym_tab->count);
+  printf("   Num:  Value   Name\n");
+
+  for (uint64_t i = 0; i < versym_tab->count; ++i) {
+    uint16_t raw_idx = versym_tab->entries[i];
+    int hidden = raw_idx & VER_NDX_HIDDEN;
+    uint16_t ver_idx = raw_idx & 0x7fff;
+
+    const char *sym_name = NULL;
+    if (dynsym_tab && dynsym_tab->symbols && i < dynsym_tab->count &&
+        dynsym_tab->strtab.str &&
+        dynsym_tab->symbols[i].st_name < dynsym_tab->strtab.len) {
+      sym_name = dynsym_tab->strtab.str + dynsym_tab->symbols[i].st_name;
+    }
+
+    const char *ver_name = ver_sym_name(ver_idx);
+    if (!ver_name && verdef_tab && ver_idx < verdef_tab->count) {
+      const ELFVerdef *def = verdef_tab->entries[ver_idx];
+      if (def && def->name.str)
+        ver_name = def->name.str;
+    }
+    if (!ver_name)
+      ver_name = "<unknown>";
+
+    printf("  [%4lu] 0x%04hx%s  %-12s %s\n", i, raw_idx,
+           hidden ? " (hidden)" : "", ver_name, sym_name ? sym_name : "");
+  }
+}
+
+void print_elf_version_definitions(const ELFVerdefTab *verdef_tab) {
+  if (!verdef_tab || !verdef_tab->entries || verdef_tab->count == 0) {
+    printf("\nNo version definition section found.\n");
+    return;
+  }
+
+  printf(
+      "\nVersion definition section '.gnu.version_d' contains %lu entries:\n",
+      verdef_tab->count);
+
+  for (uint64_t i = 0; i < verdef_tab->count; i++) {
+    const ELFVerdef *v = verdef_tab->entries[i];
+    if (!v)
+      continue;
+
+    printf(
+        "  0x%02x: Rev: %hu  Flags: 0x%hx  Index: %hu  Cnt: %hu  Hash: 0x%x\n",
+        v->verdef.vd_ndx, v->verdef.vd_version, v->verdef.vd_flags,
+        v->verdef.vd_ndx, v->verdef.vd_cnt, v->verdef.vd_hash);
+
+    if (v->name.str)
+      printf("       Name: %.*s\n", (int)v->name.len, v->name.str);
+
+    for (uint16_t j = 0; j < v->verdaux.count; j++) {
+      const Elf64_Verdaux *aux = &v->verdaux.entries[j];
+      printf("       Aux: name_off=0x%x next=0x%x\n", aux->vda_name,
+             aux->vda_next);
+    }
+  }
+}
+
+void print_elf_version_needed(const ELFVerneedTab *verneed_tab,
+                              const ELFSymTab *dynstr_tab) {
+  if (!verneed_tab || !verneed_tab->entries || verneed_tab->count == 0) {
+    printf("\nNo version needs section found.\n");
+    return;
+  }
+
+  printf("\nVersion needs section '.gnu.version_r' contains %lu entries:\n",
+         verneed_tab->count);
+
+  for (uint64_t i = 0; i < verneed_tab->count; i++) {
+    const ELFVerneed *vn = verneed_tab->entries[i];
+    if (!vn)
+      continue;
+
+    printf("  File: %.*s  Version: %hu  Cnt: %hu\n", (int)vn->file_name.len,
+           vn->file_name.str, vn->verneed.vn_version, vn->verneed.vn_cnt);
+
+    for (uint16_t j = 0; j < vn->vernaux.count; j++) {
+      const Elf64_Vernaux *aux = &vn->vernaux.entries[j];
+      const char *name = "<unknown>";
+      if (dynstr_tab && dynstr_tab->strtab.str &&
+          aux->vna_name < dynstr_tab->strtab.len) {
+        name = dynstr_tab->strtab.str + aux->vna_name;
+      }
+      printf("       Name: %s  Hash: 0x%x  Flags: 0x%hx  Other: %hu\n", name,
+             aux->vna_hash, aux->vna_flags, aux->vna_other);
+    }
+  }
+}
+
 /* Print whole ELF (readelf-style) */
 void print_elf(Arena *arena, const ELFInfo *elf) {
   ASSERT_RET(arena, elf != NULL, ERR_ARG_NULL,
@@ -421,10 +532,15 @@ void print_elf(Arena *arena, const ELFInfo *elf) {
   print_elf_phdrs(arena, elf->phdrs.headers, elf->phdrs.count);
   print_elf_shdrs(arena, elf->shdrs.headers, elf->ehdr->e_shnum,
                   elf->shdrs.strtab.str, elf->shdrs.strtab.len);
+
   print_elf_syms(arena, elf->dynsym.symbols, elf->dynsym.count,
                  elf->dynsym.strtab.str, elf->dynsym.strtab.len, ".dynsym");
   print_elf_syms(arena, elf->symtab.symbols, elf->symtab.count,
                  elf->symtab.strtab.str, elf->symtab.strtab.len, ".symtab");
   print_elf_dynamic(arena, elf);
   print_elf_reloc_tables(arena, elf);
+
+  print_elf_version_symbols(&elf->versym, &elf->dynsym, &elf->verdef);
+  print_elf_version_definitions(&elf->verdef);
+  print_elf_version_needed(&elf->verneed, &elf->dynsym);
 }
