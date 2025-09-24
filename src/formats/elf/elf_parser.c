@@ -170,13 +170,10 @@ static BError parse_strtab(Reader *reader, ELFInfo *elf) {
         "Section header string table index (%u) is out of bounds (section "
         "headers count: %u)",
         elf->shdrs.strtab_ndx, elf->shdrs.count);
-  CHECK(reader->arena,
-        elf->shdrs.strtab_off + elf->shdrs.strtab.len <= reader->size,
-        ERR_FORMAT_OUT_OF_BOUNDS,
-        "Section header string table is out of bounds");
 
   const Elf64_Shdr *shstrtab_hdr = &elf->shdrs.headers[elf->shdrs.strtab_ndx];
   elf->shdrs.strtab_off = shstrtab_hdr->sh_offset;
+
   uint64_t len = shstrtab_hdr->sh_size;
   CHECK(reader->arena, elf->shdrs.strtab_off + len <= reader->size,
         ERR_FORMAT_OUT_OF_BOUNDS,
@@ -266,9 +263,6 @@ static BError parse_symbols_table(Reader *reader, ELFInfo *elf,
           ERR_FORMAT_OUT_OF_BOUNDS, "Symbol string table is out of bounds");
 
     uint64_t len = strtab_hdr->sh_size;
-    CHECK(reader->arena, out->offset + len <= reader->size,
-          ERR_FORMAT_OUT_OF_BOUNDS, "Symbol string table is out of bounds");
-
     const char *str = (const char *)(reader->data + strtab_hdr->sh_offset);
     out->strtab = string_new(reader->arena, str, len);
 
@@ -415,7 +409,10 @@ static BError parse_reloc_table(Reader *reader, ELFInfo *elf,
 
     const char *reloc_name =
         (const char *)(elf->shdrs.strtab.str + reloc_hdr->sh_name);
-    rel_tab->name = string_new(reader->arena, reloc_name, strlen(reloc_name));
+    const uint64_t max_len = elf->shdrs.strtab.len - reloc_hdr->sh_name;
+
+    rel_tab->name =
+        string_new(reader->arena, reloc_name, strnlen(reloc_name, max_len));
   }
 
   rel_tab->sh_type = reloc_hdr->sh_type;
@@ -519,17 +516,12 @@ static BError parse_interp(Reader *reader, ELFInfo *elf) {
     return BERR_OK;
   }
 
-  CHECK(reader->arena, interp->p_offset + interp->p_memsz <= reader->size,
+  CHECK(reader->arena, interp->p_offset + interp->p_filesz <= reader->size,
         ERR_FORMAT_OUT_OF_BOUNDS,
         "Interpreter segment is out of binary bounds.");
 
-  uint64_t len = interp->p_memsz;
-  CHECK(reader->arena, interp->p_offset + len <= reader->size,
-        ERR_FORMAT_OUT_OF_BOUNDS,
-        "Section header string table is out of bounds");
-
   const char *str = (const char *)(reader->data + interp->p_offset);
-  elf->interp = string_new(reader->arena, str, len);
+  elf->interp = string_new(reader->arena, str, interp->p_filesz);
 
   return BERR_OK;
 }
@@ -620,9 +612,12 @@ static BError parse_version_definitions(Reader *reader, ELFInfo *elf) {
           RET_IF_ERR(reader_seek(reader, temp_offset));
           RET_IF_ERR(parse_verdaux_entry(reader, &temp_verdaux));
 
-          verdef->name = string_new(
-              reader->arena, elf->dynsym.strtab.str + temp_verdaux.vda_name,
-              strlen(elf->dynsym.strtab.str + temp_verdaux.vda_name));
+          const char *name = elf->dynsym.strtab.str + temp_verdaux.vda_name;
+          const uint64_t max_len =
+              elf->dynsym.strtab.len - temp_verdaux.vda_name;
+
+          verdef->name =
+              string_new(reader->arena, name, strnlen(name, max_len));
 
           RET_IF_ERR(reader_seek(reader, original_reader_offset));
         }
@@ -712,10 +707,15 @@ static BError parse_version_needs(Reader *reader, ELFInfo *elf) {
 
       // Get the file name from the dynamic string table
       if (elf->dynsym.strtab.str &&
-          verneed->verneed.vn_file < elf->dynsym.strtab.len)
-        verneed->file_name = string_new(
-            reader->arena, elf->dynsym.strtab.str + verneed->verneed.vn_file,
-            strlen(elf->dynsym.strtab.str + verneed->verneed.vn_file));
+          verneed->verneed.vn_file < elf->dynsym.strtab.len) {
+        const char *file_name =
+            elf->dynsym.strtab.str + verneed->verneed.vn_file;
+        const uint64_t max_len =
+            elf->dynsym.strtab.len - verneed->verneed.vn_file;
+
+        verneed->file_name =
+            string_new(reader->arena, file_name, strnlen(file_name, max_len));
+      }
 
       verneed->vernaux.count = verneed->verneed.vn_cnt;
       if (verneed->vernaux.count > 0) {

@@ -3,6 +3,7 @@
 
 #include "utils.h"
 
+#define ERRNO_MSG_LEN 256
 #define BERR_OK                                                                \
   ((BError){.code = OK,                                                        \
             .file = NULL,                                                      \

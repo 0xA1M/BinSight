@@ -40,12 +40,12 @@ static BError create_detailed_berror(Arena *arena, BErrorCode code,
   }
 
   if (errno_msg != NULL) {
-    if (!IS_STR_EMPTY(user_msg)) {
+    if (!IS_STR_EMPTY(user_msg))
       total_len += 2; // For ": " after user_msg
-    } else {
+    else
       total_len += 1; // For the space after ']'
-    }
-    total_len += strlen(errno_msg);
+
+    total_len += strnlen(errno_msg, ERRNO_MSG_LEN);
   }
   total_len += 1; // For null terminator
 
@@ -105,7 +105,7 @@ BError berr_from_errno(Arena *arena, BErrorCode code, const char *fmt,
     va_end(ap);
   }
 
-  char errno_str[256] = "";
+  char errno_str[ERRNO_MSG_LEN] = "";
   strerror_r(errno, errno_str, sizeof(errno_str));
 
   return create_detailed_berror(arena, code, user_msg, errno_str, file, line,
@@ -116,7 +116,7 @@ String berr_code_to_str(BErrorCode code) {
   for (size_t i = 0; i < ARR_COUNT(BErrorCodeStrTable); i++)
     if (BErrorCodeStrTable[i].id == code)
       return (String){BErrorCodeStrTable[i].name,
-                      strlen(BErrorCodeStrTable[i].name)};
+                      CSTR_LEN(BErrorCodeStrTable[i].name)};
 
   return CONST_STR("Unrecognized error code");
 }

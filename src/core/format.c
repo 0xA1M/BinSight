@@ -114,7 +114,7 @@ Binary *load_binary(const String path) {
     return NULL;
 
   binary->data = map_file(binary->arena, path.str, &binary->size);
-  if (binary->data == NULL)
+  if (binary->data == NULL || binary->data == MAP_FAILED)
     goto cleanup;
 
   err =
