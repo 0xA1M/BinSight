@@ -1,3 +1,4 @@
+// TODO: make the parser fail proof, parse what's valid, make other as corrupted
 #include <elf.h>
 #include <stdint.h>
 #include <string.h>
@@ -8,7 +9,6 @@
 #include "core/reader.h"
 #include "core/utils.h"
 #include "formats/elf/elf_parser.h"
-#include "formats/elf/elf_utils.h"
 
 // Parse ELF Headers
 static BError parse_elf_header(Reader *reader, Elf64_Ehdr *header) {
@@ -172,14 +172,19 @@ static BError parse_strtab(Reader *reader, ELFInfo *elf) {
         elf->shdrs.strtab_ndx, elf->shdrs.count);
 
   const Elf64_Shdr *shstrtab_hdr = &elf->shdrs.headers[elf->shdrs.strtab_ndx];
-  elf->shdrs.strtab_off = shstrtab_hdr->sh_offset;
+  ASSERT_RET_VAL(reader->arena, shstrtab_hdr->sh_offset < reader->size, BERR_OK,
+                 ERR_FORMAT_OUT_OF_BOUNDS,
+                 "Section header string table is out of bounds, skipping!");
 
-  uint64_t len = shstrtab_hdr->sh_size;
-  CHECK(reader->arena, elf->shdrs.strtab_off + len <= reader->size,
+  CHECK(reader->arena,
+        shstrtab_hdr->sh_offset + shstrtab_hdr->sh_size <= reader->size,
         ERR_FORMAT_OUT_OF_BOUNDS,
         "Section header string table is out of bounds");
 
-  const char *str = (const char *)(reader->data + elf->shdrs.strtab_off);
+  const char *str = (const char *)(reader->data + shstrtab_hdr->sh_offset);
+  uint64_t len = shstrtab_hdr->sh_size;
+
+  elf->shdrs.strtab_off = shstrtab_hdr->sh_offset;
   elf->shdrs.strtab = string_new(reader->arena, str, len);
 
   return BERR_OK;
@@ -451,7 +456,7 @@ static BError parse_reloc_table(Reader *reader, ELFInfo *elf,
   default: // TODO: Better handling
     rel_tab->symtab = NULL;
 
-    LOG_ERR("Relocation section '%.*s' links to a non-symbol table "
+    LOG_ERR("Relocation section '" STR "' links to a non-symbol table "
             "(type: %u)",
             (int)rel_tab->name.len, rel_tab->name.str, linked_shdr->sh_type);
     break;
@@ -516,6 +521,10 @@ static BError parse_interp(Reader *reader, ELFInfo *elf) {
     return BERR_OK;
   }
 
+  CHECK(reader->arena, interp->p_filesz < reader->size,
+        ERR_FORMAT_INVALID_FIELD,
+        "Invalid interpreter segment size. (%lu >> %lu [actual binary size])",
+        interp->p_filesz, reader->size);
   CHECK(reader->arena, interp->p_offset + interp->p_filesz <= reader->size,
         ERR_FORMAT_OUT_OF_BOUNDS,
         "Interpreter segment is out of binary bounds.");
@@ -579,6 +588,16 @@ static BError parse_version_definitions(Reader *reader, ELFInfo *elf) {
     return BERR_OK;
   }
 
+  CHECK(reader->arena,
+        verdef_hdr->sh_offset + verdef_hdr->sh_size <= reader->size,
+        ERR_FORMAT_OUT_OF_BOUNDS,
+        "Version definition header offset out of bound");
+  CHECK(reader->arena,
+        verdef_hdr->sh_info < verdef_hdr->sh_size / sizeof(Elf64_Verdef),
+        ERR_FORMAT_INVALID_FIELD,
+        "Version definition header count mismatch: got (%lu) expected (%lu)",
+        verdef_hdr->sh_info, verdef_hdr->sh_size / sizeof(Elf64_Verdef));
+
   elf->verdef.offset = verdef_hdr->sh_offset;
   elf->verdef.count = verdef_hdr->sh_info;
 
@@ -591,7 +610,13 @@ static BError parse_version_definitions(Reader *reader, ELFInfo *elf) {
           elf->verdef.count, verdef_hdr->sh_size);
 
     uintptr_t current_offset = verdef_hdr->sh_offset;
-    for (uint64_t i = 0; i < elf->verdef.count; ++i) {
+    uintptr_t section_end = verdef_hdr->sh_offset + verdef_hdr->sh_size;
+
+    for (uint64_t i = 0; i < elf->verdef.count; i++) {
+      CHECK(reader->arena, current_offset + sizeof(Elf64_Verdef) < section_end,
+            ERR_FORMAT_OUT_OF_BOUNDS,
+            "Current version definition header offset is out of bound");
+
       ELFVerdef *verdef =
           (ELFVerdef *)arena_alloc(reader->arena, sizeof(ELFVerdef));
       CHECK(reader->arena, verdef != NULL, ERR_MEM_ALLOC_FAILED,
@@ -602,7 +627,7 @@ static BError parse_version_definitions(Reader *reader, ELFInfo *elf) {
       RET_IF_ERR(parse_verdef_entry(reader, &verdef->verdef));
 
       // Get the name of the version definition
-      if (elf->dynsym.strtab.str && verdef->verdef.vd_aux > 0) {
+      if (!IS_STR_EMPTY(elf->dynsym.strtab) && verdef->verdef.vd_aux > 0) {
         uintptr_t temp_offset = current_offset + verdef->verdef.vd_aux;
 
         if (temp_offset < reader->size) {
@@ -612,12 +637,14 @@ static BError parse_version_definitions(Reader *reader, ELFInfo *elf) {
           RET_IF_ERR(reader_seek(reader, temp_offset));
           RET_IF_ERR(parse_verdaux_entry(reader, &temp_verdaux));
 
-          const char *name = elf->dynsym.strtab.str + temp_verdaux.vda_name;
-          const uint64_t max_len =
-              elf->dynsym.strtab.len - temp_verdaux.vda_name;
+          if (temp_verdaux.vda_name < elf->dynsym.strtab.len) {
+            const char *name = elf->dynsym.strtab.str + temp_verdaux.vda_name;
+            const uint64_t max_len =
+                elf->dynsym.strtab.len - temp_verdaux.vda_name;
 
-          verdef->name =
-              string_new(reader->arena, name, strnlen(name, max_len));
+            verdef->name =
+                string_new(reader->arena, name, strnlen(name, max_len));
+          }
 
           RET_IF_ERR(reader_seek(reader, original_reader_offset));
         }
@@ -647,6 +674,11 @@ static BError parse_version_definitions(Reader *reader, ELFInfo *elf) {
 
       if (verdef->verdef.vd_next == 0)
         break;
+
+      CHECK(reader->arena,
+            current_offset + verdef->verdef.vd_next < section_end,
+            ERR_FORMAT_OUT_OF_BOUNDS,
+            "Next version definition header is out of bound");
       current_offset += verdef->verdef.vd_next;
     }
   }
@@ -682,6 +714,15 @@ static BError parse_version_needs(Reader *reader, ELFInfo *elf) {
     return BERR_OK;
   }
 
+  CHECK(reader->arena,
+        verneed_hdr->sh_offset + verneed_hdr->sh_size <= reader->size,
+        ERR_FORMAT_OUT_OF_BOUNDS, "Version needs header offset out of bound");
+  CHECK(reader->arena,
+        verneed_hdr->sh_info < verneed_hdr->sh_size / sizeof(Elf64_Verneed),
+        ERR_FORMAT_INVALID_FIELD,
+        "Version needs header count mismatch: got (%lu) expected (%lu)",
+        verneed_hdr->sh_info, verneed_hdr->sh_size / sizeof(Elf64_Verneed));
+
   elf->verneed.offset = verneed_hdr->sh_offset;
   elf->verneed.count = verneed_hdr->sh_info;
 
@@ -695,7 +736,13 @@ static BError parse_version_needs(Reader *reader, ELFInfo *elf) {
         elf->verneed.count, verneed_hdr->sh_size);
 
     uintptr_t current_offset = elf->verneed.offset;
+    uintptr_t section_end = verneed_hdr->sh_offset + verneed_hdr->sh_size;
+
     for (uint64_t i = 0; i < elf->verneed.count; ++i) {
+      CHECK(reader->arena, current_offset + sizeof(Elf64_Verneed) < section_end,
+            ERR_FORMAT_OUT_OF_BOUNDS,
+            "Current version needs header offset is out of bound");
+
       ELFVerneed *verneed =
           (ELFVerneed *)arena_alloc(reader->arena, sizeof(ELFVerneed));
       CHECK(reader->arena, verneed != NULL, ERR_MEM_ALLOC_FAILED,
@@ -706,7 +753,7 @@ static BError parse_version_needs(Reader *reader, ELFInfo *elf) {
       RET_IF_ERR(parse_verneed_entry(reader, &verneed->verneed));
 
       // Get the file name from the dynamic string table
-      if (elf->dynsym.strtab.str &&
+      if (!IS_STR_EMPTY(elf->dynsym.strtab) &&
           verneed->verneed.vn_file < elf->dynsym.strtab.len) {
         const char *file_name =
             elf->dynsym.strtab.str + verneed->verneed.vn_file;
@@ -734,6 +781,11 @@ static BError parse_version_needs(Reader *reader, ELFInfo *elf) {
 
           if (verneed->vernaux.entries[j].vna_next == 0)
             break;
+
+          CHECK(reader->arena,
+                current_offset + verneed->verneed.vn_next < section_end,
+                ERR_FORMAT_OUT_OF_BOUNDS,
+                "Next version needs header is out of bound");
           vernaux_current_offset += verneed->vernaux.entries[j].vna_next;
         }
       }

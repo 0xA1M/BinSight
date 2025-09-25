@@ -2,6 +2,7 @@
 
 #include "core/binary.h"
 #include "core/error.h"
+#include "core/utils.h"
 #include "formats/elf/elf_print.h"
 
 #define VER_NDX_HIDDEN 0x8000
@@ -481,7 +482,7 @@ void print_elf_version_definitions(const ELFVerdefTab *verdef_tab) {
         v->verdef.vd_ndx, v->verdef.vd_version, v->verdef.vd_flags,
         v->verdef.vd_ndx, v->verdef.vd_cnt, v->verdef.vd_hash);
 
-    if (v->name.str)
+    if (!IS_STR_EMPTY(v->name))
       printf("       Name: %.*s\n", (int)v->name.len, v->name.str);
 
     for (uint16_t j = 0; j < v->verdaux.count; j++) {

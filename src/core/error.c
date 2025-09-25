@@ -116,7 +116,7 @@ String berr_code_to_str(BErrorCode code) {
   for (size_t i = 0; i < ARR_COUNT(BErrorCodeStrTable); i++)
     if (BErrorCodeStrTable[i].id == code)
       return (String){BErrorCodeStrTable[i].name,
-                      CSTR_LEN(BErrorCodeStrTable[i].name)};
+                      strlen(BErrorCodeStrTable[i].name)};
 
   return CONST_STR("Unrecognized error code");
 }
